@@ -47,6 +47,16 @@ A powerful voice interaction system designed for natural conversations and immer
 
 ## Change log
 
+### 10.08.2025
+
+- Added abbility to send memes according to context.
+
+  <p align="left"><img src="screen/sample2.png" alt="image-20250810165346882" style="zoom: 33%;" /></p>
+
+- Added a simple financial system using double-entry bookkeeping.
+
+  <p align="left"><img src="screen/sample_booking_en.png" alt="sample_booking_en" style="zoom: 50%;" /></p>
+
 ### 29.06.2025
 
 - Introduced a brand-new emotion system.

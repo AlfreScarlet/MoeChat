@@ -1,7 +1,8 @@
-<div align="center"><a href="https://github.com/AlfreScarlet/MoeChat"><img src="/doc/logo1.png" alt="banner" style="zoom:10%;" /></a></div>
-<div align="center"><a href="https://github.com/AlfreScarlet/MoeChat"><img src="/screen/banner.png" alt="banner" style="zoom:50%;" /></a></div>
+<p align="left"><img src="/screen/logo1.png" alt="logo1" style="zoom:20%;" /></p>
 
-<div align="center">
+![banner](/screen/banner.png)
+
+
 
 [![百度云](https://custom-icon-badges.demolab.com/badge/百度云-Link-4169E1?style=flat&logo=baidunetdisk)](https://pan.baidu.com/share/init?surl=mf6hHJt8hVW3G2Yp2gC3Sw&pwd=2333)
 [![QQ群](https://custom-icon-badges.demolab.com/badge/QQ群-967981851-00BFFF?style=flat&logo=tencent-qq)](https://qm.qq.com/q/6pfdCFxJcc)
@@ -45,6 +46,16 @@
 ![](/screen/img.png)
 
 ## 更新日志
+
+### 10.08.2025
+
+- Moechat现在可以发送表情包了。
+
+  <p align="left"><img src="/screen/sample2.png" alt="image-20250810165346882" style="zoom: 33%;" /></p>
+
+- 添加了简单的财务系统，使用复式记账。
+
+  <p align="left"><img src="/screen/sample_booking_zh.png" alt="sample_booking_zh" style="zoom: 50%;" /></p>
 
 ### 2025.06.29
 
