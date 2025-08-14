@@ -1,3 +1,4 @@
+
 document.addEventListener("DOMContentLoaded", () => {
   let mode = 'manual';
   let mediaRecorder;
@@ -26,10 +27,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let pokeResetTimer = null;
   // ===================================
 
-  function enqueueAudio(base64String) {
+  async function enqueueAudio(base64String) {
     if (!base64String || base64String === "None" || base64String.length < 10) return;
     audioQueue.push(base64String);
-    if (!isPlaying) playNextInQueue();
+    if (!isPlaying) {
+      playNextInQueue().catch(console.error);  // 改为异步调用
+    }
   }
 
   async function playNextInQueue() {
@@ -41,12 +44,16 @@ document.addEventListener("DOMContentLoaded", () => {
     let base64String = audioQueue.shift();
     base64String = base64String.replace(/-/g, '+').replace(/_/g, '/');
     while (base64String.length % 4 !== 0) base64String += '=';
+    
     try {
       const binaryString = atob(base64String);
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
       for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+      
+      // 先音频解码异步
       const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+      
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       const gainNode = audioCtx.createGain();
@@ -55,10 +62,14 @@ document.addEventListener("DOMContentLoaded", () => {
       source.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       source.start(0);
-      source.onended = () => playNextInQueue();
+      
+      // 修改：使用异步调用
+      source.onended = () => playNextInQueue().catch(console.error);
+      
     } catch (err) {
       console.error("base64 解码失败:", err);
-      playNextInQueue();
+      // 修改：错误时也使用异步调用
+      playNextInQueue().catch(console.error);
     }
   }
 
@@ -241,6 +252,7 @@ if (
   }
 
   let isHandling = false;
+
   function handleBlob(blob) {
     if (isHandling) return;
     isHandling = true;
@@ -263,6 +275,7 @@ if (
       if (currentEventSource) currentEventSource.close();
       lastBotMessageDiv = null;
       currentEventSource = new EventSource('/web/stream_chat?text=' + encodeURIComponent(result.text));
+      
       currentEventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.done) {
@@ -271,6 +284,8 @@ if (
           isHandling = false;
           return;
         }
+        
+        // 优先音频
         if (data.file && typeof data.file === 'string' && data.file.length > 20) {
           enqueueAudio(data.file);
         }
@@ -278,6 +293,7 @@ if (
           appendMessage("bot", data.message, true);
         }
       };
+      
       currentEventSource.onerror = (err) => {
         console.error('SSE error:', err);
         if (currentEventSource) currentEventSource.close();
@@ -380,35 +396,40 @@ if (
   });
 
   // ===== 新增：用于发送隐藏事件的辅助函数 =====
-  function sendHiddenEvent(text) {
-    if (!text || isHandling) return;
-    isHandling = true;
-    // 隐藏事件不在用户侧生成聊天气泡
-    if (currentEventSource) currentEventSource.close();
-    lastBotMessageDiv = null;
-    currentEventSource = new EventSource('/web/stream_chat?text=' + encodeURIComponent(text));
-    currentEventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.done) {
-        currentEventSource.close();
-        currentEventSource = null;
-        isHandling = false;
-        return;
-      }
-      if (data.file && typeof data.file === 'string' && data.file.length > 20) {
-        enqueueAudio(data.file);
-      }
-      if (data.message && typeof data.message === 'string') {
-        appendMessage("bot", data.message, true);
-      }
-    };
-    currentEventSource.onerror = (err) => {
-      console.error('SSE error:', err);
-      if (currentEventSource) currentEventSource.close();
+
+function sendHiddenEvent(text) {
+  if (!text || isHandling) return;
+  isHandling = true;
+  if (currentEventSource) currentEventSource.close();
+  lastBotMessageDiv = null;
+  currentEventSource = new EventSource('/web/stream_chat?text=' + encodeURIComponent(text));
+  
+  currentEventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.done) {
+      currentEventSource.close();
       currentEventSource = null;
       isHandling = false;
-    };
-  }
+      return;
+    }
+    
+    // 音频处理优先
+    if (data.file && typeof data.file === 'string' && data.file.length > 20) {
+      enqueueAudio(data.file);
+    }
+    if (data.message && typeof data.message === 'string') {
+      appendMessage("bot", data.message, true);
+    }
+  };
+  
+
+  currentEventSource.onerror = (err) => {
+    console.error('SSE error:', err);
+    if (currentEventSource) currentEventSource.close();
+    currentEventSource = null;
+    isHandling = false;
+  };
+}
   // ===========================================
 
   document.getElementById('clearBtn').addEventListener('click', () => {
@@ -467,6 +488,7 @@ if (
     if (currentEventSource) currentEventSource.close();
     lastBotMessageDiv = null;
     currentEventSource = new EventSource('/web/stream_chat?text=' + encodeURIComponent(text));
+    
     currentEventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.done) {
@@ -475,6 +497,8 @@ if (
         isHandling = false;
         return;
       }
+      
+      // 先音频处理
       if (data.file && typeof data.file === 'string' && data.file.length > 20) {
         enqueueAudio(data.file);
       }
