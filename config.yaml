@@ -3,7 +3,9 @@ Core:
   sv:
     is_up: false
     master_audio: test.wav # 包含你声音的wav音频文件，建议3s-5s左右。
-    thr: # 阈值，越小越敏感，建议0.5-0.8之间，实测好像不是很有用？
+    thr: 0.5 # 阈值，越小越敏感，建议0.5-0.8之间，实测好像不是很有用？
+  min_text_len: 10
+  max_text_len: 40
 LLM:
   api: https://api.siliconflow.cn/v1/chat/completions
   key: sk-tcdxspehrwkdjtkffrrqpmfmmmhpmofgoiwtzuaelkjxbakq

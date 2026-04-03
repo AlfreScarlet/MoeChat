@@ -1,5 +1,9 @@
 import jionlp
 import re
+from utils import config as CConfig
+
+MIN_TEXT_LEN = CConfig.config["Core"]["min_text_len"]
+MAX_TEXT_LEN = CConfig.config["Core"]["max_text_len"]
 
 
 def remove_parentheses_content_and_split(
@@ -62,16 +66,18 @@ def remove_parentheses_content_and_split_v2(
             continue
         if stat != 0:
             continue
-        if text[ii] in ["…", "~", "～", "。", "？", "！", "?", "!", ",", "，"] and (
+        if (text[ii] in ["…", "~", "～", ",", "，", "…"]) and len(
+            re.sub(r"[(\[（].*?[)\]）]", "", text[: ii + 1])
+        ) > MAX_TEXT_LEN:
+            return text[: ii + 1], text[ii + 1 :]
+        if text[ii] in ["。", "？", "！", "?", "!"] and (
             len(text) > ii + 1
         ):
-            if text[ii + 1] in ["…", "~", "～", "。", "？", "！", "?", "!", ",", "，"]:
+            if text[ii + 1] in ["。", "？", "！", "?", "!"]:
                 continue
             if is_first:
                 return text[: ii + 1], text[ii + 1 :]
-            if (text[ii] in [",", "，", "…"]) and len(
-                re.sub(r"[$(（[].*?[]）)]", "", text[: ii + 1])
-            ) <= 10:
+            if len(re.sub(r"[(\[（].*?[)\]）]", "", text[: ii + 1])) < MIN_TEXT_LEN:
                 continue
             return text[: ii + 1], text[ii + 1 :]
         # if (text[ii] in ["…", "~", "～",  ",", "，"])  and len(re.sub(r'[$(（[].*?[]）)]', '', text[:ii+1])) <= 10:

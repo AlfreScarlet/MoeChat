@@ -12,6 +12,7 @@ import jionlp
 from bisect import bisect_left, bisect_right
 from utils import log as Log
 from models.types.assistant_info import AssistantInfo
+import json
 
 
 class Memory:
@@ -37,56 +38,48 @@ class Memory:
 
         # 加载记忆
         msg_vectors = []
-        path = f"./data/agents/{self.agent_id}/memory"
-        for root, dirs, files in os.walk(path):
-            # print(files)
-            for file in files:
-                try:
-                    file_path = os.path.join(root, file)
-                    if file_path.find(".yaml") == -1:
-                        continue
-                    msgs = []
-                    tag = []
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        data = yaml.safe_load(f)
-                        for key in data:
-                            self.memories_data[key] = (
-                                str(data[key]["msg"])
-                                .replace("{{user}}", self.user)
-                                .replace("{{char}}", self.char)
-                            )
-                            tag.append(data[key]["text_tag"])
-                            m_list = data[key]["msg"].split("\n")
-                            self.memories_key.append(key)
-                            # self.date_time.append(m_list[0])
-                            msgs.append(f"{m_list[1]}{m_list[2]}")
-                    if os.path.exists(file_path.replace(".yaml", ".pkl")):
-                        with open(file_path.replace(".yaml", ".pkl"), "rb") as f:
-                            tmp_data = pickle.load(f)
-                            self.vectors += tmp_data
-                        Log.logger.info(f"加载记忆【{file}】")
-                    else:
-                        Log.logger.info(f"向量化记忆【{file}】")
-                        t_v = embedding.t2vect(tag)
-                        msg_vectors.append(t_v)
-                        with open(file_path.replace(".yaml", ".pkl"), "wb") as f:
-                            pickle.dump(t_v, f)
-                        Log.logger.info(f"向量化完成【{file}】")
-                except:
-                    Log.logger.error(f"【{file_path}】记忆加载失败...")
-                    continue
-            # print(f"[错误]【{path}】")
-        # self.char_vectors = np.concatenate(char_v)
-        # self.user_vectors = np.concatenate(user_v)
-        # if msg_vectors:
-        #     self.vectors = np.concatenate(msg_vectors)
+        self.memories_path = f"./data/agents/{self.agent_id}/memory"
+        # 加载记忆
+        self._load_all_memories()
+        
         Log.logger.info(
             f"共加载{len(self.memories_key)}条记忆...{len(self.vectors)}条记忆向量"
         )
 
-        # 建立、加载索引数据库
-        # if os.path.exists(self.char_file_path) and os.path.exists(self.user_file_path):
-        #     with open()
+    def _load_all_memories(self):
+        """加载所有jsonl记忆文件"""
+        for root, dirs, files in os.walk(self.memories_path):
+            for file in files:
+                if not file.endswith(".jsonl"):
+                    continue
+                file_path = os.path.join(root, file)
+                try:
+                    self._load_jsonl_file(file_path)
+                except Exception as e:
+                    Log.logger.error(f"【{file_path}】记忆加载失败: {e}")
+                    continue
+
+    def _load_jsonl_file(self, file_path: str):
+        """加载jsonl格式的记忆文件"""
+        Log.logger.info(f"加载记忆【{os.path.basename(file_path)}】")
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    timestamp = data["timestamp"]
+                    self.memories_key.append(timestamp)
+                    self.memories_data[timestamp] = (
+                        str(data["msg"])
+                        .replace("{{user}}", self.user)
+                        .replace("{{char}}", self.char)
+                    )
+                    self.vectors.append(np.array(data["vector"], dtype=np.float32))
+                except json.JSONDecodeError as e:
+                    Log.logger.error(f"JSON解析错误: {e}")
+                    continue
 
     def find_range_indices(self, low, high) -> list | None:
         start_idx = bisect_left(self.memories_key, low)  # 找到第一个 >= low 的索引
@@ -146,7 +139,7 @@ class Memory:
         # 将时间范围内的记忆添加到结果中
         if self.enableLongMemorySearchEnhance:
             Log.logger.info(f"深度检索记忆，检索阈值{self.thresholds}")
-            q_v = embedding.t2vect([msg])[0]
+            q_v = embedding.q2vect([msg])[0]
             tmp_msg = ""
             for index in range(res_index[0] + 1, res_index[1] + 1):
                 rr = np.dot(self.vectors[index], q_v)
@@ -170,34 +163,48 @@ class Memory:
                 res_msg.append(tmp_mem)
 
     # 写入记忆
-    def add_memory(self, m_data: dict):
-        t_n = int(m_data["t_n"])
-        self.memories_key.append(t_n)
-        self.memories_data[t_n] = m_data["msg"]
-        tag_vector = embedding.t2vect([m_data["text_tag"]])[0]
-        self.vectors.append(tag_vector)
-        time_st = time.localtime(t_n)
-        file_name = f"{time_st.tm_year}-{time_st.tm_mon}-{time_st.tm_mday}.yaml"
-        file_pkl = f"{time_st.tm_year}-{time_st.tm_mon}-{time_st.tm_mday}.pkl"
-        data = {
-            t_n: {
-                "text_tag": m_data["text_tag"],
-                "msg": LiteralScalarString(m_data["msg"]),
-            }
-        }
-        Yaml = YAML()
-        Yaml.preserve_quotes = True
-        Yaml.width = 4096
+    def _get_jsonl_filename(self, timestamp_ms: int) -> str:
+        """根据毫秒级时间戳获取jsonl文件名"""
+        timestamp_sec = timestamp_ms // 1000  # 毫秒转秒
+        time_st = time.localtime(timestamp_sec)
+        return f"{time_st.tm_year}-{time_st.tm_mon}-{time_st.tm_mday}.jsonl"
 
-        with open(
-            f"./data/agents/{self.agent_id}/memory/{file_name}", "a", encoding="utf-8"
-        ) as f:
-            Yaml.dump(data, f)
-        day_time = t_n - (t_n - time.timezone) % 86400
-        index = bisect_left(self.memories_key, day_time)
-        v_list = self.vectors[index:]
-        with open(f"./data/agents/{self.agent_id}/memory/{file_pkl}", "wb") as f:
-            pickle.dump(v_list, f)
+    def _write_memory_to_jsonl(self, timestamp: int, text_tag: str, msg: str, vector: np.ndarray):
+        """将单条记忆写入jsonl文件
+        
+        格式: 键换行，键值与键并排显示（紧凑格式）
+        """
+        file_name = self._get_jsonl_filename(timestamp)
+        file_path = os.path.join(self.memories_path, file_name)
+        
+        # 构建记忆数据
+        memory_data = {
+            "timestamp": timestamp,
+            "text_tag": text_tag,
+            "msg": msg,
+            "vector": vector.tolist() if isinstance(vector, np.ndarray) else vector
+        }
+        
+        # 写入jsonl（紧凑格式，键值并排）
+        with open(file_path, "a", encoding="utf-8") as f:
+            # 使用separators去除多余空格，ensure_ascii=False支持中文
+            json_line = json.dumps(memory_data, ensure_ascii=False, separators=(',', ':'))
+            f.write(json_line + "\n")
+
+    def add_memory(self, m_data: dict):
+        """写入记忆（新版jsonl格式）"""
+        t_n = int(m_data["t_n"])
+        text_tag = m_data["text_tag"]
+        msg = m_data["msg"]
+        
+        # 更新内存数据
+        self.memories_key.append(t_n)
+        self.memories_data[t_n] = msg
+        tag_vector = embedding.t2vect([text_tag])[0]
+        self.vectors.append(tag_vector)
+        
+        # 写入jsonl文件
+        self._write_memory_to_jsonl(t_n, text_tag, msg, tag_vector)
 
     # 提取记忆摘要，记录长期记忆
     def add_memory1(self, data: list, t_n: int, llm_config: dict):

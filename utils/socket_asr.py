@@ -58,14 +58,17 @@ class ASRServer:
             )
 
     def asr(self, audio_data: bytes) -> str | None:
+        # 从内存读取音频，转为 numpy 数组传给 FunASR（新版 torchaudio 不支持 BytesIO）
         audio_buffer = BytesIO(audio_data)
+        data, samplerate = sf.read(audio_buffer, dtype="float32")
         res = self.asr_model.generate(
-            input=audio_buffer,
+            input=data,
             cache={},
             language="zh",  # "zh", "en", "yue", "ja", "ko", "nospeech"
             ban_emo_unk=True,
             use_itn=False,
             disable_pbar=True,
+            fs=samplerate,
             # batch_size=200,
         )
         text = str(rich_transcription_postprocess(res[0]["text"])).replace(" ", "")

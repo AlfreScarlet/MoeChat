@@ -2,6 +2,7 @@ env
 __pycache__
 .venv
 .vscode
+.kiro
 
 /data/models/*
 !/data/models/silero_vad.onnx
@@ -11,3 +12,5 @@ __pycache__
 data/last_used_agent.txt
 
 test*
+/.vscode
+/.kiro

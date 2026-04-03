@@ -1,31 +1,38 @@
-from modelscope.pipelines import pipeline
-from modelscope.utils.constant import Tasks
-from modelscope import snapshot_download
+from sentence_transformers import SentenceTransformer
 import numpy as np
 from utils import log as Log
 
+if None:
+    import os
+    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+model_path = "./data/models/bge-base-zh-v1.5"
+QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关记忆段落："
 
 # 加载embedding模型
 def load_model():
-    return pipeline(
-        Tasks.sentence_embedding,
-        model="./data/models/nlp_gte_sentence-embedding_chinese-base",
-        sequence_length=100,
-    )
-
+    return SentenceTransformer(model_path)
 
 try:
     embedding_model = load_model()
 except:
     Log.logger.warning(f"embedding模型未安装，开始安装embedding模型...")
-    model_id = "iic/nlp_gte_sentence-embedding_chinese-base"
-    local_dir = "./data/models/nlp_gte_sentence-embedding_chinese-base"
-    snapshot_download(model_id=model_id, local_dir=local_dir)
+    model = SentenceTransformer("BAAI/bge-base-zh-v1.5")
+    model.save(model_path)
     embedding_model = load_model()
 
 
+# 存储用 —— 不加前缀
 def t2vect(text: list[str]) -> np.ndarray[np.ndarray]:
-    return embedding_model(input={"source_sentence": text})["text_embedding"]
+    return embedding_model.encode(text, normalize_embeddings=True)
+
+
+# 检索用 —— 加前缀
+def q2vect(text: list[str]) -> np.ndarray[np.ndarray]:
+    return embedding_model.encode(
+        [QUERY_INSTRUCTION + t for t in text], 
+        normalize_embeddings=True
+    )
 
 
 def test(msg: str, memorys: list, thresholds: float):

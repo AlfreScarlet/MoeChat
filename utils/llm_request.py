@@ -74,7 +74,7 @@ async def llm_request_stream(msg: list[Message]):
                                 # 提取内容
                                 content = json_data["choices"][0]["delta"].get(
                                     "content", ""
-                                )
+                                ) if json_data.get("choices") else ""
 
                                 # 如果有内容则返回
                                 if content:

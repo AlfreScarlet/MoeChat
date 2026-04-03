@@ -33,6 +33,7 @@ dependencies = [
     "transformers>=4.55.2", #预训练模型库
     "uvicorn>=0.35.0", #ASGI服务器
     "websockets>=15.0.1", #异步WebSockets库
+    "sentence_transformers",
 ]
 
 [project.optional-dependencies]

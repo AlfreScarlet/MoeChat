@@ -1,20 +1,20 @@
 {
-    "cSpell.words": [
-        "dspeaker",
-        "faiss",
-        "frombuffer",
-        "funasr",
-        "gptsovits",
-        "heweather",
-        "jionlp",
-        "mktime",
-        "modelscope",
-        "moechat",
-        "scalarstring",
-        "sovits",
-        "vect",
-        "VITS"
+    "MicroPython.executeButton": [
+        {
+            "text": "▶",
+            "tooltip": "Run",
+            "alignment": "left",
+            "command": "extension.executeFile",
+            "priority": 3.5
+        }
     ],
-    "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": []
+    "MicroPython.syncButton": [
+        {
+            "text": "$(sync)",
+            "tooltip": "sync",
+            "alignment": "left",
+            "command": "extension.execute",
+            "priority": 4
+        }
+    ]
 }
