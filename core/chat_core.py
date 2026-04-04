@@ -79,6 +79,9 @@ class StreamProcessor:
         # 取消标志
         self.cancelled = False
 
+        # 错误信息
+        self.error_message: str | None = None
+
     def cancel(self):
         """取消并清空所有队列"""
         self.cancelled = True
@@ -114,7 +117,10 @@ class StreamProcessor:
             await self.res_queue.put("DONE_DONE")
 
         elif msg_type == "error":
-            raise Exception(content)
+            # 标记任务失败，不抛出异常避免重复日志
+            self.llm_done = True
+            self.error_message = content
+            await self.res_queue.put("DONE_DONE")
 
     def _get_emotion(self, msg: str) -> str | None:
         """查询文字中的情感字段"""
@@ -777,11 +783,15 @@ async def text_llm_tts_v3(msg: str):
 
                 # 检查是否所有任务都完成
                 if processor.llm_done and processor.tts_done:
-                    # 发送最终的完成消息
-                    yield b"<|complete|><|end|>"
+                    # 如果有错误，发送错误消息
+                    if processor.error_message:
+                        yield f"<|error|>{processor.error_message}<|end|>".encode("utf-8")
+                    else:
+                        # 发送最终的完成消息
+                        yield b"<|complete|><|end|>"
 
-                    # agent写入上下文、日记
-                    agent.add_msg("".join(processor.full_msg))
+                        # agent写入上下文、日记
+                        agent.add_msg("".join(processor.full_msg))
                     break
 
             except asyncio.TimeoutError:

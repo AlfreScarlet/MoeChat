@@ -12,5 +12,3 @@ __pycache__
 data/last_used_agent.txt
 
 test*
-/.vscode
-/.kiro

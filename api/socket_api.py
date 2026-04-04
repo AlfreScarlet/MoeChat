@@ -12,9 +12,10 @@ from core.chat_core import current_task
 
 
 async def chat_proxy(msg: str, client_socket: socket.socket):
+    loop = asyncio.get_event_loop()
     try:
         async for chunk in chat_core.text_llm_tts_v3(msg=msg):
-            client_socket.sendall(chunk)
+            await loop.sock_sendall(client_socket, chunk)
     except (BrokenPipeError, ConnectionResetError, OSError):
         logger.info("客户端断开连接")
         raise
