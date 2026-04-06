@@ -208,10 +208,6 @@ class Agent:
             agent_config=self.agent_config, llm_config=self.llm_config
         )
 
-        # 初始化摘要总结进程
-        t = Thread(target=self.summarize_context, args=(), daemon=True)
-        t.start()
-
     def get_data(self, msg: str, res_msg: list) -> None:
         """
         检索知识库
@@ -442,50 +438,3 @@ class Agent:
         # 清空临时消息列表
         self.msg_data_tmp = []
 
-    
-    # 摘要总结进程
-    def summarize_context(self):
-        while True:
-            if time.time() + 3600 > self.summary_time and len(self.msg_data) > self.agent_config.settings.contextLength:
-                Log.logger.info("开始总结摘要...")
-                context = ""
-                for msg in self.msg_data:
-                    if msg["role"] == "user":
-                        context += f"{self.user}：{msg['content']}\n"
-                        continue
-                    if msg["role"] == "assistant":
-                        context += f"{self.char}：{msg['content']}\n\n"
-                        continue
-                user_prompy = prompt.context_summary.replace("{{char}}", self.char).replace("{{user}}", self.user).replace("{{context}}", context)
-                if self.context_summary:
-                    user_prompy = user_prompy.replace("{{old_context_summary}}", self.context_summary)
-                else:
-                    user_prompy = user_prompy.replace("{{old_context_summary}}", "无")
-                res_body = {
-                    "model": self.llm_config["model"],
-                    "messages": [
-                        {"role": "user", "content": user_prompy},
-                    ],
-                }
-                key = self.llm_config["key"]
-                headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-                try:
-                    res = requests.post(
-                        self.llm_config["api"], json=res_body, headers=headers, timeout=120
-                    )
-                    res_context_summary = res.json()["choices"][0]["message"]["content"]
-
-                    # 存入文件
-                    with open(f"./data/agents/{self.agent_name}/context_summary.md", "w", encoding="utf-8") as f:
-                        f.write(res_context_summary)
-                    with open(f"./data/agents/{self.agent_name}/history.yaml", "w", encoding="utf-8") as f:
-                        pass
-
-                    # 写入agent变量，清空聊天列表
-                    self.context_summary = res_context_summary
-                    self.msg_data = []
-                except Exception as e:
-                    Log.logger.error(f"摘要失败：{e}")
-                    return
-                
-                Log.logger.info("摘要总结完毕...")

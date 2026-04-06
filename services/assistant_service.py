@@ -2,13 +2,16 @@ import json
 import os
 import shutil
 import time
+from threading import Thread
 
+import requests
 import yaml
 from Config import Config
 from models.dto.assistant_request import AddAssistantRequest, UpdateAssistantRequest
 from models.types.assistant_info import AssistantInfo
 from utils.agent import Agent
 from utils.file_utils import get_latest_modification_time
+from utils import prompt
 import utils.log as Log
 
 
@@ -35,6 +38,8 @@ class AssistantService:
         self.assistants_cache: dict[str, AssistantInfo] = {}
         # 初始化已加载助手为空字典
         self.loaded_agents: dict[str, Agent] = {}
+        # 摘要总结线程
+        self._summarize_thread: Thread | None = None
 
     def load_assistant_info(self) -> list[AssistantInfo]:
         """
@@ -225,6 +230,7 @@ class AssistantService:
             self.current_assistant = agent
             self.current_assistant_name = assistant_name
             self.loaded_agents[assistant_name] = agent
+            self._start_summarize_thread()
             Log.logger.info(f"已加载并切换到助手: {assistant_name}")
             return agent
         except Exception as e:
@@ -357,3 +363,102 @@ class AssistantService:
                 Log.logger.error(f"加载助手信息失败: {assistant_name}, 错误: {e}")
 
         return None
+
+    def _start_summarize_thread(self) -> None:
+        """
+        启动摘要总结线程，遍历所有已加载助手进行摘要检查。
+        仅在线程未运行时启动。
+        """
+        if self._summarize_thread is not None and self._summarize_thread.is_alive():
+            return
+        self._summarize_thread = Thread(
+            target=self._summarize_context_loop, args=(), daemon=True
+        )
+        self._summarize_thread.start()
+
+    def _summarize_context_loop(self) -> None:
+        """
+        摘要总结循环，定期遍历所有已加载助手，检查是否需要摘要总结
+        """
+        while True:
+            time.sleep(300)
+            for agent in list(self.loaded_agents.values()):
+                try:
+                    if (
+                        time.time() + 3600 > agent.summary_time
+                        and len(agent.msg_data)
+                        > agent.agent_config.settings.contextLength
+                    ):
+                        self._do_summarize(agent)
+                except Exception as e:
+                    Log.logger.error(
+                        f"助手 {agent.agent_name} 摘要检查异常：{e}"
+                    )
+
+    def _do_summarize(self, agent: Agent) -> None:
+        """
+        对指定助手执行一次摘要总结
+        """
+        Log.logger.info("开始总结摘要...")
+        context = ""
+        for msg in agent.msg_data:
+            if msg["role"] == "user":
+                context += f"{agent.user}：{msg['content']}\n"
+                continue
+            if msg["role"] == "assistant":
+                context += f"{agent.char}：{msg['content']}\n\n"
+                continue
+        user_prompy = (
+            prompt.context_summary
+            .replace("{{char}}", agent.char)
+            .replace("{{user}}", agent.user)
+            .replace("{{context}}", context)
+        )
+        if agent.context_summary:
+            user_prompy = user_prompy.replace(
+                "{{old_context_summary}}", agent.context_summary
+            )
+        else:
+            user_prompy = user_prompy.replace("{{old_context_summary}}", "无")
+        res_body = {
+            "model": agent.llm_config["model"],
+            "messages": [
+                {"role": "user", "content": user_prompy},
+            ],
+        }
+        key = agent.llm_config["key"]
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            res = requests.post(
+                agent.llm_config["api"],
+                json=res_body,
+                headers=headers,
+                timeout=120,
+            )
+            res_context_summary = res.json()["choices"][0]["message"]["content"]
+
+            # 存入文件
+            with open(
+                f"./data/agents/{agent.agent_name}/context_summary.md",
+                "w",
+                encoding="utf-8",
+            ) as f:
+                f.write(res_context_summary)
+            with open(
+                f"./data/agents/{agent.agent_name}/history.yaml",
+                "w",
+                encoding="utf-8",
+            ) as f:
+                pass
+
+            # 写入agent变量，清空聊天列表
+            agent.context_summary = res_context_summary
+            agent.msg_data = []
+        except Exception as e:
+            Log.logger.error(f"摘要失败：{e}")
+            return
+
+        Log.logger.info("摘要总结完毕...")
