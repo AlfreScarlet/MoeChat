@@ -18,7 +18,7 @@ class CoreMemory:
         self.agent_id = agent_config.name
         self.char = agent_config.name
         self.user = agent_config.user
-        self.thresholds = 0.5
+        self.thresholds = 0.31
         self.file_path = f"./data/agents/{self.agent_id}/core_mem.yml"
         # self.update_config()
         self.msgs = []
