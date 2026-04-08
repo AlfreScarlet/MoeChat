@@ -180,7 +180,8 @@ class Agent:
             ) as f:
                 msg_list = yaml.safe_load(f)
                 # self.msg_data = msg_list[-self.agent_config.settings.contextLength :]
-                self.msg_data = msg_list
+                if msg_list:
+                    self.msg_data = msg_list
                 Log.logger.info(f"当前上下文长度：{len(msg_list)}")
         except:
             Log.logger.error(f"加载上下文失败：{self.agent_name}")
