@@ -782,8 +782,8 @@ async def text_llm_tts_v3(msg: str):
                 for task in done:
                     if task == text_task:
                         if is_first_msg:
-                            first_data_time = time.time()
                             logger.info(f"[大模型首句延迟]{(time.time() - first_data_time) / 1000:.2f}s")
+                            first_data_time = time.time()
                             is_first_msg = False
                         msg_type, content = text_task.result()
 
