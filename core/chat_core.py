@@ -312,14 +312,14 @@ async def tts_task(tts_data: TTSData, stream=None) -> AsyncGenerator[bytes, None
     agent = assistant_service.get_current_assistant()
     if not agent:
         logger.error("[错误] 当前没有加载助手")
-        return None
+        return
 
     msg = tts_data.text
     msg = re.sub(r"\(.*?\)|（.*?）|【.*?】|\[.*?\]|\{.*?\}", "", msg)
     msg = msg.replace(" ", "").replace("\n", "")
     # msg = clear_text(tts_data.text)
     if len(msg) == 0:
-        return None
+        return
     ref_audio = tts_data.ref_audio
     ref_text = tts_data.ref_text
     logger.info(f"[tts文本]{msg}")
@@ -345,7 +345,7 @@ async def tts_task(tts_data: TTSData, stream=None) -> AsyncGenerator[bytes, None
         async for audio_chunk in gptsovits_tts(data):
             yield audio_chunk
     except:
-        return None
+        return
 
 
 async def start_tts(res_queue: asyncio.Queue, audio_queue: asyncio.Queue, processor=None, stream=None):
