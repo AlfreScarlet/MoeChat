@@ -453,7 +453,7 @@ async def start_llm_task(
 
             try:
                 if first_print_time_flag:
-                    logger.info(f"[大模型延迟]{(time.time() - start_time) / 1000:.2f}s")
+                    logger.info(f"[大模型延迟]{time.time() - start_time:.3f}s")
                     first_print_time_flag = False
 
                 # 立即将新文本发送到文本队列（流式输出）
@@ -782,7 +782,7 @@ async def text_llm_tts_v3(msg: str):
                 for task in done:
                     if task == text_task:
                         if is_first_msg:
-                            logger.info(f"[大模型首句延迟]{(time.time() - first_data_time) / 1000:.2f}s")
+                            logger.info(f"[大模型首句延迟]{time.time() - first_data_time:.3f}s")
                             first_data_time = time.time()
                             is_first_msg = False
                         msg_type, content = text_task.result()
@@ -796,7 +796,7 @@ async def text_llm_tts_v3(msg: str):
 
                     elif task == audio_task:
                         if is_first_audio:
-                            logger.info(f"[TTS首包延迟]{(time.time() - first_data_time) / 1000:.2f}s")
+                            logger.info(f"[TTS首包延迟]{time.time() - first_data_time:.3f}s")
                             is_first_audio = False
                         audio_item = audio_task.result()
 
