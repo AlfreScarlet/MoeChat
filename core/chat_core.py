@@ -3,6 +3,7 @@ import time
 import asyncio
 import base64
 import re
+from typing import AsyncGenerator
 import httpx
 from fastapi.responses import JSONResponse
 from models.dto.tts_request import tts_data
@@ -266,31 +267,41 @@ class StreamProcessor:
         }\n\n"""
 
 
-async def gptsovits_tts(data: dict):
+async def gptsovits_tts(data: dict) -> AsyncGenerator[bytes, None]:
     """
-    调用gptsovits进行语音合成
+    调用gptsovits进行语音合成(流式请求+流式返回原始bytes)
 
     Parameters:
         data (dict): 符合gptsovits的语音合成参数
+
+    Yields:
+        bytes: 音频数据块
     """
     async with httpx.AsyncClient() as client:
         try:
-            res = await client.post(CConfig.config["GSV"]["api"], json=data, timeout=10)
-            if res.status_code == 200:
-                return res.content
-            else:
-                logger.error(f"[错误]tts语音合成失败！！！")
-                logger.error(data)
-                logger.error(res)
-                logger.error(res.text)
-                return None
+            async with client.stream(
+                "POST", CConfig.config["GSV"]["api"], json=data, timeout=10
+            ) as response:
+                if response.status_code != 200:
+                    logger.error(
+                        f"[错误]tts语音合成失败！！！状态码: {response.status_code}"
+                    )
+                    logger.error(data)
+                    response_text = await response.aread()
+                    logger.error(response_text)
+                    return
+
+                # 直接流式读取原始bytes
+                async for chunk in response.aiter_bytes():
+                    if chunk:
+                        yield chunk
+
         except Exception as e:
             logger.error(f"[错误]tts语音合成失败！！！ 错误信息: {e}")
             logger.error(data)
-            return None
 
 
-async def tts_task(tts_data: TTSData, stream=None) -> bytes | None:
+async def tts_task(tts_data: TTSData, stream=None) -> AsyncGenerator[bytes, None]:
     """
     构建tts任务
 
@@ -320,18 +331,19 @@ async def tts_task(tts_data: TTSData, stream=None) -> bytes | None:
         "prompt_lang": agent.agent_config.gsvSetting.promptLang,
         "seed": agent.agent_config.gsvSetting.seed,
         "top_k": agent.agent_config.gsvSetting.topK,
-        "batch_size": agent.agent_config.gsvSetting.batchSize,
     }
     if stream:
         data["streaming_mode"] = 2
         data["media_type"] = "raw"
         data["text_split_method"] = "cut0"
+    else:
+        data["batch_size"] = agent.agent_config.gsvSetting.batchSize
     if ref_audio:
         data["ref_audio_path"] = ref_audio
         data["prompt_text"] = ref_text
     try:
-        byte_data = await gptsovits_tts(data)
-        return byte_data
+        async for audio_chunk in gptsovits_tts(data):
+            yield audio_chunk
     except:
         return None
 
@@ -369,20 +381,21 @@ async def start_tts(res_queue: asyncio.Queue, audio_queue: asyncio.Queue, proces
 
             logger.info(f"正在合成: {item.text[:10]}...")
             
-            if stream:
-                audio_data = await tts_task(item, stream=True)
-            else:
-                audio_data = await tts_task(item)
+            async for audio_data in tts_task(item, stream=stream):
+            # if stream:
+            #     audio_data = await tts_task(item, stream=True)
+            # else:
+            #     audio_data = await tts_task(item)
 
-            if audio_data is None:
-                logger.error(f"TTS处理出错，发送空音频以跳过阻塞: {item.text[:10]}...")
-                continue
+                if audio_data is None:
+                    logger.error(f"TTS处理出错，发送空音频以跳过阻塞: {item.text[:10]}...")
+                    continue
 
-            if stream:
-                await audio_queue.put(audio_data)
-            else:
-                encode_data = base64.b64encode(audio_data).decode("utf-8")
-                await audio_queue.put(encode_data)
+                if stream:
+                    await audio_queue.put(audio_data)
+                else:
+                    encode_data = base64.b64encode(audio_data).decode("utf-8")
+                    await audio_queue.put(encode_data)
 
         except Exception as e:
             logger.error(f"TTS循环发生未知错误: {e}", exc_info=True)
@@ -440,7 +453,7 @@ async def start_llm_task(
 
             try:
                 if first_print_time_flag:
-                    logger.info(f"[大模型延迟]{time.time() - start_time}")
+                    logger.info(f"[大模型延迟]{(time.time() - start_time) / 1000:.2f}s")
                     first_print_time_flag = False
 
                 # 立即将新文本发送到文本队列（流式输出）
@@ -722,6 +735,11 @@ async def text_llm_tts_v3(msg: str):
     # 初始化处理器
     processor = StreamProcessor()
 
+    # 初始化记时器
+    is_first_msg = True
+    is_first_audio = True
+    first_data_time = time.time()
+
     # 创建LLM和TTS任务
     llm_task = asyncio.create_task(
         start_llm_task(msg_list_for_llm, processor.text_queue, processor)
@@ -763,6 +781,10 @@ async def text_llm_tts_v3(msg: str):
                 # 处理完成的任务
                 for task in done:
                     if task == text_task:
+                        if is_first_msg:
+                            first_data_time = time.time()
+                            logger.info(f"[大模型首句延迟]{(time.time() - first_data_time) / 1000:.2f}s")
+                            is_first_msg = False
                         msg_type, content = text_task.result()
 
                         # 处理文本流并进入TTS队列
@@ -773,6 +795,9 @@ async def text_llm_tts_v3(msg: str):
                             yield f"<|text|>{content}<|end|>".encode("utf-8")
 
                     elif task == audio_task:
+                        if is_first_audio:
+                            logger.info(f"[TTS首包延迟]{(time.time() - first_data_time) / 1000:.2f}s")
+                            is_first_audio = False
                         audio_item = audio_task.result()
 
                         if audio_item == "DONE_DONE":
