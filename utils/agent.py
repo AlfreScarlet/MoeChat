@@ -163,6 +163,11 @@ class Agent:
         # 上次摘要总结时间
         self.summary_time = time.time()
 
+        # 对话锁
+        self.async_chat_lock = asyncio.Lock()
+        # 打断锁：用于保护打断信号的原子操作
+        self.interrupted_lock = asyncio.Lock()
+        self.interrupted = False  # 打断信号
 
         # 加载摘要总结
         try:

@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 import time
-from threading import Thread
+from threading import Thread, Lock
 
 import requests
 import yaml
@@ -17,29 +17,40 @@ import utils.log as Log
 
 class AssistantService:
     """
-    助手服务类
+    助手服务类（线程安全单例）
     """
 
     _instance = None
+    _lock = Lock()
+    _initialized = False
 
     current_assistant: Agent | None = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._lock:
+                # 双重检查锁，确保线程安全
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
-        # 初始化当前助手为None
-        self.current_assistant: Agent | None = None
-        # 初始化当前助手名称为None
-        self.current_assistant_name: str | None = None
-        # 初始化助手信息缓存为空字典
-        self.assistants_cache: dict[str, AssistantInfo] = {}
-        # 初始化已加载助手为空字典
-        self.loaded_agents: dict[str, Agent] = {}
-        # 摘要总结线程
-        self._summarize_thread: Thread | None = None
+        # 单例模式：只有第一次创建时才初始化属性（线程安全）
+        with AssistantService._lock:
+            if AssistantService._initialized:
+                return
+            AssistantService._initialized = True
+            
+            # 初始化当前助手为None
+            self.current_assistant: Agent | None = None
+            # 初始化当前助手名称为None
+            self.current_assistant_name: str | None = None
+            # 初始化助手信息缓存为空字典
+            self.assistants_cache: dict[str, AssistantInfo] = {}
+            # 初始化已加载助手为空字典
+            self.loaded_agents: dict[str, Agent] = {}
+            # 摘要总结线程
+            self._summarize_thread: Thread | None = None
 
     def load_assistant_info(self) -> list[AssistantInfo]:
         """

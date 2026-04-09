@@ -4,42 +4,42 @@ import asyncio
 from utils.pysilero import VADIterator
 from utils.log import logger
 from io import BytesIO
-import core.chat_core as chat_core
+from core.chat_api_v4 import text_llm_tts_v4
+from core.chat_core import asr
 import soundfile as sf
 import numpy as np
 import time
-from core.chat_core import current_task
+from services.assistant_service import AssistantService
+from utils.agent import Agent
+
+
+# 模块级别的单例，避免每次连接重复创建
+assistant_service = AssistantService()
 
 
 async def chat_proxy(msg: str, client_socket: socket.socket):
     loop = asyncio.get_event_loop()
     try:
-        async for chunk in chat_core.text_llm_tts_v3(msg=msg):
+        async for chunk in text_llm_tts_v4(msg=msg):
             await loop.sock_sendall(client_socket, chunk)
     except (BrokenPipeError, ConnectionResetError, OSError):
         logger.info("客户端断开连接")
         raise
 
-async def stop():
-    """取消当前正在进行的任务"""
-    if current_task["processor"]:
-        logger.info("取消之前的任务...")
-        current_task["processor"].cancel()
-    if current_task["llm"] and not current_task["llm"].done():
-        current_task["llm"].cancel()
+def _get_agent_safe(client_socket: socket.socket) -> Agent | None:
+    """安全获取当前助手，如果助手未加载则关闭连接并返回None"""
+    agent = assistant_service.get_current_assistant()
+    if not agent:
+        logger.error("当前没有加载助手，连接已断开")
         try:
-            await current_task["llm"]
-        except (asyncio.CancelledError, Exception):
+            client_socket.close()
+        except:
             pass
-    if current_task["tts"] and not current_task["tts"].done():
-        current_task["tts"].cancel()
-        try:
-            await current_task["tts"]
-        except (asyncio.CancelledError, Exception):
-            pass
+    return agent
+
 
 async def handle_client(client_socket: socket.socket):
-    """处理客户端连接，确保完整接收消息"""
+    """处理客户端连接，确保完整接收消息（支持实时切换助手）"""
     vad_iterator = VADIterator(speech_pad_ms=400)
     current_speech = []
     current_speech_tmp = []
@@ -49,6 +49,12 @@ async def handle_client(client_socket: socket.socket):
     last_msg_time = time.time()
     loop = asyncio.get_event_loop()
     client_socket.setblocking(False)
+    
+    # 初始检查是否有助手
+    agent = _get_agent_safe(client_socket)
+    if not agent:
+        return
+
     # 发送欢迎消息
     while True:
         # 检查缓存数据是否存在<|end|>结束符号
@@ -59,13 +65,19 @@ async def handle_client(client_socket: socket.socket):
                 if not data:  # 客户端正常关闭
                     client_socket.close()
                     logger.info(f"客户端断开：{client_socket}")
-                    await stop()
+                    agent = _get_agent_safe(client_socket)
+                    if agent:
+                        async with agent.interrupted_lock:
+                            agent.interrupted = True  # 设置打断状态
                     return
                 data_tmp += data
             except (ConnectionResetError, OSError) as e:
                 client_socket.close()
                 logger.info(f"客户端异常断开：{e}")
-                await stop()
+                agent = _get_agent_safe(client_socket)
+                if agent:
+                    async with agent.interrupted_lock:
+                        agent.interrupted = True  # 设置打断状态
                 return
             continue
 
@@ -73,6 +85,12 @@ async def handle_client(client_socket: socket.socket):
         data_tmp = data_tmp.split(b"<|end|>")[1]
 
         if b"<|me|>" in complate_data:
+            # 实时获取最新助手（支持切换）
+            agent = _get_agent_safe(client_socket)
+            if not agent:
+                return
+            async with agent.interrupted_lock:
+                agent.interrupted = True  # 设置打断状态
             complate_data = complate_data.replace(b"<|me|>", b"")
             try:
                 asyncio.create_task(chat_proxy(msg=complate_data.decode("utf-8"), client_socket=client_socket))
@@ -109,11 +127,19 @@ async def handle_client(client_socket: socket.socket):
                 try:
                     # 发送打断信号
                     client_socket.sendall(f"<|start|><|end|>".encode("utf-8"))
-                    await stop()
+                    # 实时获取最新助手（支持切换）
+                    agent = _get_agent_safe(client_socket)
+                    if not agent:
+                        return
+                    async with agent.interrupted_lock:
+                        agent.interrupted = True  # 设置打断状态
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     client_socket.close()
                     logger.info("客户端断开连接")
-                    await stop()
+                    agent = _get_agent_safe(client_socket)
+                    if agent:
+                        async with agent.interrupted_lock:
+                            agent.interrupted = True  # 设置打断状态
                     return
                 pass
             if status:
@@ -137,7 +163,7 @@ async def handle_client(client_socket: socket.socket):
                     )
                     buffer.seek(0)
                     audio_bytes = buffer.read()  # 完整的 WAV bytes
-                    res_text = chat_core.asr(audio_bytes)
+                    res_text = asr(audio_bytes)
                     if res_text:
                         try:
                             client_socket.sendall(f"<|me|>{res_text}<|end|>".encode("utf-8"))
@@ -146,7 +172,10 @@ async def handle_client(client_socket: socket.socket):
                         except (BrokenPipeError, ConnectionResetError, OSError):
                             client_socket.close()
                             logger.info("客户端断开连接")
-                            await stop()
+                            agent = _get_agent_safe(client_socket)
+                            if agent:
+                                async with agent.interrupted_lock:
+                                    agent.interrupted = True  # 设置打断状态
                             return
                 # current_speech = []  # 清空当前段落
 

@@ -54,7 +54,19 @@ def remove_parentheses_content_and_split(
 def remove_parentheses_content_and_split_v2(
     text: str, is_first: bool
 ) -> tuple[str, str]:
-
+    """
+    函数注释
+    Args:
+        text (str): 输入的字符串
+        is_first (bool): 是否是第一轮生成
+    Returns:
+        tuple[str, str]: 切句结果、剩余文本
+    处理规则：
+- 移除完整的括号对及其内容：(内容)
+- 移除不完整的左括号及其后面所有内容：(后面的内容
+- 移除不完整的右括号及其前面内容到字符串开头或上一个左括号
+- 根据标点符号进行消息的分句，且保证内容完整
+    """
     text = text.replace("...", "…")
     stat = 0
     for ii in range(len(text)):

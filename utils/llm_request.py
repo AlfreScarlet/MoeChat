@@ -66,7 +66,6 @@ async def llm_request_stream(msg: list[Message]):
                             # 检查是否为结束标记
                             if data_str == "[DONE]":
                                 break
-
                             try:
                                 # 解析JSON数据
                                 json_data = json.loads(data_str)
