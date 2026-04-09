@@ -163,9 +163,8 @@ class Memory:
                 res_msg.append(tmp_mem)
 
     # 写入记忆
-    def _get_jsonl_filename(self, timestamp_ms: int) -> str:
+    def _get_jsonl_filename(self, timestamp_sec: int) -> str:
         """根据毫秒级时间戳获取jsonl文件名"""
-        timestamp_sec = timestamp_ms // 1000  # 毫秒转秒
         time_st = time.localtime(timestamp_sec)
         return f"{time_st.tm_year}-{time_st.tm_mon}-{time_st.tm_mday}.jsonl"
 

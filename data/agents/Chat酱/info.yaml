@@ -20,7 +20,7 @@ startWith: []
 settings:
   enableLongMemory: true
   enableLongMemorySearchEnhance: true
-  enableCoreMemory: true
+  enableCoreMemory: false
   longMemoryThreshold: 0.32
   enableLoreBooks: true
   loreBooksThreshold: 0.5
