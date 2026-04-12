@@ -1,6 +1,7 @@
 # emotion/hormone_cycle.py
 
 import datetime
+from utils.log import logger
 
 class HormoneCycle:
     """
@@ -21,7 +22,7 @@ class HormoneCycle:
         days_passed = time_delta.days
 
         if days_passed > 0:
-            print(f"[周期模块] 已过去 {days_passed} 天，更新生理周期。")
+            logger.info(f"生理周期已过去 {days_passed} 天，更新周期天数")
             self.cycle_day += days_passed
             self.cycle_day = ((self.cycle_day - 1) % self.cycle_length) + 1
             self.last_update_timestamp = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -73,7 +74,7 @@ class HormoneCycle:
         else:
             phase_name = "未知"
 
-        print(f"[周期模块] 当前第 {day}/{self.cycle_length} 天，处于 {phase_name}。")
+        logger.info(f"生理周期第 {day}/{self.cycle_length} 天，处于 {phase_name}")
         
         return {
             'inertia_factor': inertia_factor,

@@ -494,7 +494,7 @@ async def text_llm_tts(params: tts_data):
         logger.error("[错误] 当前没有加载助手")
         return
     # 获取agent内容
-    msg_list_for_llm = agent.get_msg_data(params.msg[-1]["content"])
+    msg_list_for_llm = await agent.get_msg_data(params.msg[-1]["content"])
 
     # 初始化处理器
     processor = StreamProcessor()
@@ -593,7 +593,7 @@ async def text_llm_tts_v2(params: tts_data):
         logger.error("[错误] 当前没有加载助手")
         return
     # 获取agent内容
-    msg_list_for_llm = agent.get_msg_data(params.msg[-1]["content"])
+    msg_list_for_llm = await agent.get_msg_data(params.msg[-1]["content"])
 
     # 初始化处理器
     processor = StreamProcessor()
@@ -730,7 +730,7 @@ async def text_llm_tts_v3(msg: str):
         logger.error("[错误] 当前没有加载助手")
         return
     # 获取agent内容
-    msg_list_for_llm = agent.get_msg_data(msg=msg)
+    msg_list_for_llm = await agent.get_msg_data(msg=msg)
 
     # 初始化处理器
     processor = StreamProcessor()

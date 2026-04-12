@@ -18,6 +18,7 @@ from core.emotion.create_mood_instruction import create_mood_instruction
 from core.emotion.hormone_cycle import HormoneCycle
 from models.types.assistant_info import AssistantInfo
 from Config import Config
+from utils.log import logger
 
 
 class EmotionState(Enum):
@@ -29,7 +30,7 @@ class EmotionState(Enum):
 class EmotionEngine:
 
     def __init__(self, agent_config: AssistantInfo, llm_config):
-        print("情绪引擎已启动...")
+        logger.info("情绪引擎已启动...")
         self.STATE_FILE = os.path.join(
             Config.BASE_AGENTS_PATH, agent_config.name, "emotion_state.json"
         )
@@ -104,12 +105,12 @@ class EmotionEngine:
             with open(self.STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(state_to_save, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            print(f"[情绪引擎] 错误: 保存状态失败 - {e}")
+            logger.error(f"保存状态失败: {e}")
 
     def _load_state(self) -> dict | None:
         """从文件加载情绪状态"""
         if not os.path.exists(self.STATE_FILE):
-            print("[情绪引擎] 状态文件不存在，使用默认值初始化。")
+            logger.info("状态文件不存在，使用默认值初始化")
             return None
 
         try:
@@ -132,8 +133,8 @@ class EmotionEngine:
                 else None
             )
 
-            print(
-                f"[情绪引擎] 成功从文件加载过往情绪状态 (V: {self.valence:.2f}, A: {self.arousal:.2f})。"
+            logger.info(
+                f"成功从文件加载过往情绪状态 (V: {self.valence:.2f}, A: {self.arousal:.2f})"
             )
 
             cycle_state = {
@@ -150,7 +151,7 @@ class EmotionEngine:
             return cycle_state
 
         except Exception as e:
-            print(f"[情绪引擎] 警告: 加载状态失败，将使用默认值。错误: {e}")
+            logger.warning(f"加载状态失败，将使用默认值: {e}")
             return None
 
     def _update_latent_emotions(
@@ -241,13 +242,13 @@ class EmotionEngine:
                         "content"
                     ]
                 except (KeyError, IndexError, TypeError):
-                    print("[情绪引擎] 错误: LLM返回的JSON结构不完整。")
+                    logger.error("LLM返回的JSON结构不完整")
                     return self.valence, self.arousal, "neutral", 0.0
 
                 json_match = re.search(r"\{.*\}", llm_content_str, re.DOTALL)
 
                 if not json_match:
-                    print("[情绪引擎] 警告: 在LLM的返回中未找到有效的JSON结构。")
+                    logger.warning("在LLM的返回中未找到有效的JSON结构")
                     return self.valence, self.arousal, "neutral", 0.0
 
                 cleaned_json_str = json_match.group(0)
@@ -255,9 +256,7 @@ class EmotionEngine:
                 try:
                     analysis = json.loads(cleaned_json_str)
                 except json.JSONDecodeError:
-                    print(
-                        "[情绪引擎] 警告: 清洗后的字符串依然不是有效的JSON，本轮情绪无变化。"
-                    )
+                    logger.warning("清洗后的字符串依然不是有效的JSON，本轮情绪无变化")
                     return self.valence, self.arousal, "neutral", 0.0
 
                 sentiment = analysis.get("sentiment", "neutral")
@@ -291,14 +290,11 @@ class EmotionEngine:
 
                 return final_valence, final_arousal, sentiment, impact_strength
             else:
-                print(f"[情绪系统] API请求失败，状态码: {response.status_code}")
-                print(
-                    f"[情绪系统] API响应内容: {response.text}，模型：{self.llm_model_for_sentiment}"
-                )
+                logger.error(f"API请求失败，状态码: {response.status_code}, 响应: {response.text}, 模型: {self.llm_model_for_sentiment}")
 
                 return self.valence, self.arousal, "neutral", 0.0
         except Exception as e:
-            print(f"[情绪系统] 情绪状态更新过程中发生错误: {e}")
+            logger.error(f"情绪状态更新过程中发生错误: {e}")
             return self.valence, self.arousal, "neutral", 0.0
 
     async def process_emotion(self, text: str) -> str:
@@ -310,7 +306,7 @@ class EmotionEngine:
             ).total_seconds() / 60.0
 
             if self.valence >= -0.3 or elapsed_time >= self.MELTDOWN_DURATION_MINUTES:
-                print(f"[情绪引擎] 爆发期结束。切换到恢复期。")
+                logger.info("爆发期结束，切换到恢复期")
                 self.character_state = EmotionState.RECOVERING
                 self.meltdown_start_time = datetime.datetime.now()
             else:
@@ -364,15 +360,15 @@ class EmotionEngine:
             self.valence = max(-1.0, min(1.0, self.valence))  # 确保范围
 
             if self.latent_emotions["frustration"] > self.FRUSTRATION_THRESHOLD:
-                print(f"[情绪引擎] 烦躁值超出阈值，触发情绪熔断！")
+                logger.info("烦躁值超出阈值，触发情绪熔断")
                 self.character_state = EmotionState.MELTDOWN
                 self.meltdown_start_time = datetime.datetime.now()
                 self.valence = -1.0
                 self.arousal = 1.0
                 self.latent_emotions["frustration"] = 0.0
 
-        print(
-            f"[情绪引擎] 状态: {self.character_state.value} | V: {self.valence:.2f}, A: {self.arousal:.2f} | Frustration: {self.latent_emotions['frustration']:.2f}"
+        logger.info(
+            f"状态: {self.character_state.value} | V: {self.valence:.2f}, A: {self.arousal:.2f} | Frustration: {self.latent_emotions['frustration']:.2f}"
         )
         self._save_state()
         return create_mood_instruction(self.valence, self.arousal)

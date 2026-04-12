@@ -111,7 +111,7 @@ async def text_llm_tts_v4(msg: str) -> AsyncGenerator[bytes, None]:
             agent.interrupted = False  # 重置打断状态
 
         # 获取上下文
-        context = agent.get_msg_data(msg=msg)
+        context = await agent.get_msg_data(msg=msg)
         if not context:
             return 
 

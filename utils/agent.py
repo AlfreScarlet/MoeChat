@@ -273,7 +273,7 @@ class Agent:
         except:
             return
 
-    def get_msg_data(self, msg: str) -> list[str]:
+    async def get_msg_data(self, msg: str) -> list[str]:
         """
         获取发送到大模型的上下文
 
@@ -343,7 +343,7 @@ class Agent:
         # 如果开启了情绪系统，调用情绪引擎处理消息
         emotion_instruction = ""
         if self.enable_emotion_engine:
-            emotion_instruction = asyncio.run(self.emotionEngine.process_emotion(msg))
+            emotion_instruction = await self.emotionEngine.process_emotion(msg)
 
         # 等待查询结果
         for task_thread in task_list:
