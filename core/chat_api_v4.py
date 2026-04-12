@@ -111,9 +111,11 @@ async def text_llm_tts_v4(msg: str) -> AsyncGenerator[bytes, None]:
             agent.interrupted = False  # 重置打断状态
 
         # 获取上下文
+        t1 = time.time()
         context = await agent.get_msg_data(msg=msg)
         if not context:
             return 
+        logger.info(f"上下文准备耗时: {time.time() - t1:.3f}秒")
 
         text_tts_queue = asyncio.Queue()
         res_queue = asyncio.Queue()

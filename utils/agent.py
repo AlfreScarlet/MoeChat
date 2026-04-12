@@ -303,6 +303,13 @@ class Agent:
         core_mem = []
         # 添加系统提示词
         res_msg.append({"role": "system", "content": self.prompt})
+        
+        # 调用情绪系统
+        # 如果开启了情绪系统，调用情绪引擎处理消息
+        emotion_instruction = []
+        task_emotion_instruction = None
+        if self.enable_emotion_engine:
+            task_emotion_instruction = asyncio.create_task(self.emotionEngine.process_emotion(msg, emotion_instruction))
 
         # 检索世界书
         if self.enable_data_base:
@@ -339,13 +346,12 @@ class Agent:
             )
             task_list.append(task_thread)
             task_thread.start()
-        # 调用情绪系统
-        # 如果开启了情绪系统，调用情绪引擎处理消息
-        emotion_instruction = ""
-        if self.enable_emotion_engine:
-            emotion_instruction = await self.emotionEngine.process_emotion(msg)
 
         # 等待查询结果
+        if task_emotion_instruction:
+            await asyncio.gather(task_emotion_instruction)
+            if emotion_instruction:
+                emotion_instruction = emotion_instruction[0]
         for task_thread in task_list:
             task_thread.join()
 
