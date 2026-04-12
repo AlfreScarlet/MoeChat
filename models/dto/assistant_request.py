@@ -74,3 +74,10 @@ class DeleteAssistantRequest(BaseModel):
 # 切换助手请求模型
 class SwitchAssistantRequest(BaseModel):
     name: str = Field(..., description="助手名称")
+
+class GetAssistantAvatar(BaseModel):
+    name: str = Field(..., description="助手名称")
+
+class UploadAssistantAvatar(BaseModel):
+    name: str = Field(..., description="助手名称")
+    data: str = Field(..., description="头像数据，base64编码字符串")

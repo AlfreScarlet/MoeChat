@@ -3,6 +3,7 @@ import re
 import shutil
 import zipfile
 import io
+import base64
 from pathlib import Path
 from models.dto.assistant_request import (
     AddAssistantRequest,
@@ -11,6 +12,8 @@ from models.dto.assistant_request import (
     DeleteAssistantRequest,
     UpdateAssistantRequest,
     SwitchAssistantRequest,
+    GetAssistantAvatar,
+    UploadAssistantAvatar,
 )
 
 from services.assistant_service import AssistantService
@@ -395,3 +398,33 @@ async def delete_assistant(delete_request: DeleteAssistantRequest):
     except Exception as e:
         logger.error(f"删除助手失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"删除助手失败: {str(e)}")
+
+
+@assistant_api.post("/assistant/info/avatar")
+async def get_assistant_avatar(get_request: GetAssistantAvatar):
+    try:
+        avatar_bytes = b""
+        with open(f"data/agents/{get_request.name}/avatar", "rb") as f:
+            avatar_bytes = f.read()
+        avatar_base64 = base64.b64encode(avatar_bytes).decode("utf-8")
+        return {"msg": "获取助手头像成功", "data": avatar_base64}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"获取助手头像失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取助手头像失败: {str(e)}")
+    
+    
+@assistant_api.post("/assistant/upload/avatar")
+async def upload_assistant_avatar(data: UploadAssistantAvatar):
+    try:
+        avatar_data = base64.b64decode(data.data)
+        avatar_path = f"data/agents/{data.name}/avatar"
+        with open(avatar_path, "wb") as f:
+            f.write(avatar_data)
+        return {"msg": "上传助手头像成功"}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"上传助手头像失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"上传助手头像失败: {str(e)}")
