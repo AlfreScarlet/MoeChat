@@ -35,3 +35,10 @@ SLM: # 用于语音检测，改写，意图判断的小模型
 
 GSV:
   api: http://127.0.0.1:9880/tts
+
+ASR:
+  type: local # local或api
+  api:
+    url: http://localhost:11434/v1/chat/completions
+    key: 
+    model: Qwen3-ASR-0.6B

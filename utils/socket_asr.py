@@ -12,6 +12,8 @@ from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
 from io import BytesIO
 from utils.log import logger
+from utils import config as CConfig
+import httpx
 
 
 class ASRServer:
@@ -32,6 +34,9 @@ class ASRServer:
         """
         加载asr模型
         """
+        if "ASR" in CConfig.config and CConfig.config["ASR"]["type"] == "api":
+            logger.info("[提示]ASR使用API接口，无需加载本地模型。")
+            return
         model_dir = "./data/models/SenseVoiceSmall"
         try:
             self.asr_model = AutoModel(
@@ -58,6 +63,41 @@ class ASRServer:
             )
 
     def asr(self, audio_data: bytes) -> str | None:
+        if "ASR" in CConfig.config and CConfig.config["ASR"]["type"] == "api":
+            url = CConfig.config["ASR"]["api"]["url"]
+            key = CConfig.config["ASR"]["api"]["key"]
+            model = CConfig.config["ASR"]["api"]["model"]
+            headers = {"Authorization": f"Bearer {key}"}
+            base64_audio = base64.b64encode(audio_data).decode("utf-8")
+            post_data = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "audio_url",
+                                "audio_url": {
+                                    "url": f"data:audio/wav;base64,{base64_audio}"
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+            try:
+                response = httpx.post(url, json=post_data, headers=headers, timeout=5)
+                response.raise_for_status()
+                res_json = response.json()
+                text = res_json["choices"][0]["message"]["content"]
+                text = str(text).split("<asr_text>")[1]
+                if text:
+                    return text
+            except Exception as e:
+                logger.error(f"ASR API请求失败: {e}")
+                return None
+            return None
+
         # 从内存读取音频，转为 numpy 数组传给 FunASR（新版 torchaudio 不支持 BytesIO）
         audio_buffer = BytesIO(audio_data)
         data, samplerate = sf.read(audio_buffer, dtype="float32")
