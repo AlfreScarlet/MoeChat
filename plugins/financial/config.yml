@@ -1,7 +1,10 @@
 # Financial Plugin Configuration
 financial_plugin:
   # 基础设置
-  enabled: true
+  # Standalone/opt-in by default: MoeChat's main chat runtime does not
+  # initialize this hook yet, so keep the plugin disabled unless an
+  # integration layer explicitly enables and calls it.
+  enabled: false
   name: "财务记录插件"
   version: "1.0.0"
   
@@ -23,5 +26,5 @@ financial_plugin:
     
   # 调试设置
   debug:
-    enabled: true
+    enabled: false
     log_level: "INFO"

@@ -4,6 +4,7 @@
 from flask import Flask, request, render_template, jsonify
 from datetime import datetime
 import json
+import os
 
 # 导入自定义模块
 from modules.parser import TransactionParser
@@ -286,8 +287,11 @@ def internal_error(error):
 
 
 if __name__ == "__main__":
+    host = os.environ.get("MOECHAT_FINANCIAL_HOST", "127.0.0.1")
+    port = int(os.environ.get("MOECHAT_FINANCIAL_PORT", "5000"))
+
     print("=== 财务记录系统启动 ===")
-    print("访问地址: http://localhost:5000")
+    print(f"访问地址: http://{host}:{port}")
     print("API文档:")
     print("  POST /api/transaction - 添加交易")
     print("  GET  /api/balance/<账户名> - 查询余额")
@@ -300,4 +304,4 @@ if __name__ == "__main__":
     print("========================")
 
     # 启动Flask应用
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host=host, port=port, debug=True)
