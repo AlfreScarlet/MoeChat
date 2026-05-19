@@ -1,3 +1,12 @@
+"""
+Legacy experimental router.
+
+This module is not mounted by web/src/router/router.py, so its HeWeather branch
+is not part of the current main chat runtime. Treat it as an experimental
+integration target until configuration, dependencies, static paths, and
+end-to-end /api/stream_chat behavior are wired together in one PR.
+"""
+
 from fastapi import Query, APIRouter
 from fastapi.responses import StreamingResponse, Response, RedirectResponse
 from pydantic import BaseModel

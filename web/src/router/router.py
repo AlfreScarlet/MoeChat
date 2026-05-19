@@ -4,6 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from web.src.router.api_router import api_router
 from web.src.controller.controller import templates
 
+# Legacy experimental router. It contains HeWeather/image/meme branches, but the
+# main web chat currently uses /api/stream_chat -> core.chat_core instead. Do not
+# mount this router without a dedicated integration pass and end-to-end checks.
 # from core.external_server import router as models_router
 
 app = FastAPI()
