@@ -3,14 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from web.src.router.api_router import api_router
 from web.src.controller.controller import templates
+from server_settings import cors_allows_credentials, get_cors_origins
 
 # from core.external_server import router as models_router
 
+
+cors_origins = get_cors_origins()
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=cors_allows_credentials(cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )

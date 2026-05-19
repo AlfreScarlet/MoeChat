@@ -101,6 +101,16 @@ uv sync
 uv run main_web.py
 ```
 
+> 默认情况下，MoeChat 只监听本机 `127.0.0.1`。如果确实需要局域网访问，请显式设置
+> `MOECHAT_HOST`、`MOECHAT_SOCKET_HOST` 和 `MOECHAT_CORS_ORIGINS`，例如只允许你的前端来源：
+>
+> ```bash
+> MOECHAT_HOST=0.0.0.0 \
+> MOECHAT_SOCKET_HOST=0.0.0.0 \
+> MOECHAT_CORS_ORIGINS=http://192.168.1.10:8001 \
+> uv run main_web.py
+> ```
+
 ## 客户端使用方法
 
 感谢三三 sama 为 MoeChat 提供客户端支持。
