@@ -11,6 +11,7 @@ dependencies = [
     "datasets<3", #数据集处理（无直接使用，依赖）
     "faiss-cpu>=1.12.0", #向量搜索
     "fastapi>=0.116.1", #Web API框架
+    "flask>=3.1.0", #记忆编辑器Web界面
     "funasr>=1.2.7", #语音识别
     "httpx>=0.28.1", #异步HTTP请求库
     "jionlp>=1.5.24", #中文自然语言处理工具包
