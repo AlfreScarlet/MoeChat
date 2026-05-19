@@ -13,6 +13,8 @@ dependencies = [
     "fastapi>=0.116.1", #Web API框架
     "funasr>=1.2.7", #语音识别
     "httpx>=0.28.1", #异步HTTP请求库
+    "filetype>=1.2.0", #文件类型检测
+    "jinja2>=3.1.0", #Web模板渲染
     "jionlp>=1.5.24", #中文自然语言处理工具包
     "modelscope>=1.29.0", #模型库
     "numpy<2.0", #数值计算库
@@ -20,7 +22,9 @@ dependencies = [
     "pillow>=11.3.0", #图像处理库
     "praat-parselmouth>=0.4.6", #Praat语音分析库（无直接使用，依赖）
     "pyrnnoise>=0.3.8", #降噪库（无直接使用，依赖）
+    "pyyaml>=6.0.2", #YAML配置处理
     "python-multipart>=0.0.20", #多部分表单数据处理(fastapi依赖)
+    "requests>=2.32.0", #同步HTTP请求库
     "rich>=14.1.0", #富文本输出库
     "ruamel-yaml>=0.18.14", #YAML处理库
     "scipy>=1.15.3", #科学计算库
@@ -50,11 +54,11 @@ default = true
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-windows", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-windows", marker = "sys_platform == 'win32'" },
   { index = "pytorch-linux", marker = "sys_platform == 'linux'" },
 ]
 torchaudio = [
-  { index = "pytorch-windows", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-windows", marker = "sys_platform == 'win32'" },
   { index = "pytorch-linux", marker = "sys_platform == 'linux'" },
 ]
 

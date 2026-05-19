@@ -1,0 +1,33 @@
+Core:
+  tt: false
+  sv:
+    is_up: false
+    master_audio: test.wav
+    thr: 0.5
+  min_text_len: 10
+  max_text_len: 40
+LLM:
+  api: https://api.siliconflow.cn/v1/chat/completions
+  key: "" # Set your own OpenAI-compatible API key locally.
+  model: Qwen/Qwen3-8B
+  extra_config:
+LLM2:
+  api: https://api.siliconflow.cn/v1/chat/completions
+  key: "" # Set your own OpenAI-compatible API key locally.
+  model: Qwen/Qwen3-8B
+  extra_config:
+SLM:
+  api: http://localhost:11434/v1/chat/completions
+  key:
+  model: qwen3:0.6b
+  extra_config:
+    temperature: 0.6
+    stream: false
+GSV:
+  api: http://127.0.0.1:9880/tts
+ASR:
+  type: local
+  api:
+    url: http://localhost:11434/v1/chat/completions
+    key:
+    model: Qwen3-ASR-0.6B

@@ -113,7 +113,8 @@ runtime\python.exe api_v2.py
 2. Run the following command.
 
 ```bash
-GPT-SoVITS-version_name\runtime\python.exe chat_server.py
+uv sync
+uv run main_web.py
 ```
 
 ### Linux (Ubuntu / Debian / Linux Mint)
@@ -170,70 +171,67 @@ source ~/.bashrc
 
 Now it's time to create your environment.
 
-1. Install a specific version of Python — in this example, we’ll use **3.10.13**.
+1. Install a specific version of Python — MoeChat requires **Python 3.11+**.
    `pyenv` will download the source code and compile it from scratch, which may take a few minutes to complete.
 
    ```bash
-   pyenv install 3.10.13
+   pyenv install 3.11
    ```
 
-2. Create a virtual environment named `moechat310` (or any name you like) based on the Python version you just installed.
+2. Create a virtual environment named `moechat311` (or any name you like) based on the Python version you just installed.
 
    ```bash
-   pyenv virtualenv 3.10.13 moechat310
+   pyenv virtualenv 3.11 moechat311
    ```
 
 3. Your environment has been successfully created. You can now activate and use it from any directory using following command.
 
    ```bash
-   pyenv activate moechat310
+   pyenv activate moechat311
    ```
 
    After activation, your terminal prompt should be prefixed with the environment name, you should see output like this:
 
    ```bash
-   (moechat310) tenzray@tenzray-MS-7C73:~$
+   (moechat311) tenzray@tenzray-MS-7C73:~$
    ```
 
-##### Install Packages from a `requirements.txt` File
+##### Install Packages with `uv`
 
 1. Make sure your environment is still activated. If not, activate it first:
 
    ```bash
-   pyenv activate moechat310
+   pyenv activate moechat311
    ```
 
-2. Then, use the `cd` command to navigate to your project directory — the one that contains the `requirements.txt` file.
+2. Then, use the `cd` command to navigate to your project directory — the one that contains `pyproject.toml`.
 
    ```bash
    # Example: navigate to your project directory
    cd ~/your_own_path/moechat
    ```
 
-3. Use `pip` to install all the dependencies listed in `requirements.txt`.
+3. Use `uv` to install the project dependencies from `pyproject.toml`.
 
    ```bash
-   pip install -r requirements.txt
+   uv sync
    ```
-
-   -r tells pip to read from a requirements file.
 
    > [!NOTE]
    >
-   > Note that, you should install both requirement from [GPT-Sovits](https://github.com/RVC-Boss/GPT-SoVITS) and Moechat. You can run the `pip install -r` command for each file.
+   > GPT-SoVITS is still a separate service. Install and start its own dependencies from the GPT-SoVITS project before starting MoeChat.
 
 4. You can verify if the packages were successfully installed in the current environment.
 
    ```bash
-   # List all installed packages in the current environment
-   pip list
+   uv run python -c "import sys; print(sys.version)"
    ```
 
 ## Basic Client Guide
 
 ### Windows
 
-Tested with Python 3.10.
+Tested with Python 3.11.
 If you want to run the server and client separately (e.g. access the server remotely),
 you can modify the IP address in lines 17 and 18 of the `client-gui/src/client_utils.py` file.
 
@@ -257,78 +255,42 @@ python client-gui\src\client_gui.py
 ## Configuration
 
 The package uses `config.yaml` as its default configuration file.
+`config.example.yaml` contains a sanitized template. Do not commit real API keys; set your own local keys in `config.yaml`.
 
 ```yaml
 Core:
+  tt: false
   sv:
     is_up: false
-    master_audio: test.wav    	# .wav file containing your voice is required. A duration of 3-5s is recommended.
-    thr:                      	# Threshold — lower means more sensitive. Recommended range: 0.5–0.8. (Note: this parameter seems to have little effect based on testing.)
-
+    master_audio: test.wav
+    thr: 0.5
+  min_text_len: 10
+  max_text_len: 40
 LLM:
-  api: http://host:port/v1/chat/completions	# LLM API endpoint
-  key: asdasd					# Token for LLM API access, no need if local.
-  model: 					# Model name
-  extra_config:               			# Additional LLM API parameters (e.g., temperature: 0.7)
-    "frequency_penalty": 0.0
-    "n": 1
-    "presence_penalty": 0.0
-    "top_p": 1.0
-    # temperature: 0.7
+  api: https://api.siliconflow.cn/v1/chat/completions
+  key: "" # Set your own OpenAI-compatible API key locally.
+  model: Qwen/Qwen3-8B
+  extra_config:
+LLM2:
+  api: https://api.siliconflow.cn/v1/chat/completions
+  key: "" # Set your own OpenAI-compatible API key locally.
+  model: Qwen/Qwen3-8B
+  extra_config:
+SLM:
+  api: http://localhost:11434/v1/chat/completions
+  key:
+  model: qwen3:0.6b
+  extra_config:
+    temperature: 0.6
+    stream: false
 GSV:
-  api: http://host:port/tts/	# Endpoint URL for the GPT-SoVITS API
-  text_lang: zh			# Language of the output text to be synthesized
-  GPT_weight: 			# GPT model name
-  SoVITS_weight:		# SoVITS model name
-  ref_audio_path: 		# Path to the reference audio file
-  prompt_text: 			# Text corresponding to the reference audio
-  prompt_lang: zh		# Language spoken in the reference audio
-  aux_ref_audio_paths:        	# List of multiple reference audios (only for v2 models)
-    -
-  seed: -1
-  top_k: 15
-  batch_size: 20
-  ex_config:
-    text_split_method: cut0
-extra_ref_audio:              	# Use emotion tags to select reference audio, e.g. [Neutral] "Hello there."
-  # Example:
-  # Neutral:
-  #   - path_to_reference_audio.wav
-  #   - corresponding_text_for_the_audio
-Agent:
-  is_up: true                 	 # Enable character template system. If disabled, the system behaves like the classic version with basic voice chat only.
-  char: Chat-chan                # Character name (will be injected into prompt templates)
-  user: AlfreScarlet            # User name (will be injected into prompt templates)
-  long_memory: true           	# Enable diary system. This allows long-term storage of conversation logs and supports time-based queries like:"What did I do yesterday?" or "What did I eat two days ago?"
-  is_check_memorys: true      	# Enhance diary search. Uses an embedding model to filter and extract relevant information from diary entries.
-  is_core_mem: true           	# Enable core memory. Stores important personal information about the user (e.g. address, hobbies, favorites). Unlike the diary, this uses semantic matching (fuzzy search) and does not support time-based queries,but each memory record includes a timestamp.
-  mem_thresholds: 0.39        	# Diary search similarity threshold. Only applies if enhanced diary search is enabled. A higher threshold may miss relevant memories; a lower one may allow irrelevant data.
-  lore_books: true            	# Enable lore_books (Knowledge Base). Injects knowledge about people, items, events, etc., to enhance LLM capabilities and roleplay consistency.
-  books_thresholds: 0.5       	# Similarity threshold for Worldbook retrieval.
-  scan_depth: 4               	# lore_books search depth. Controls how many knowledge entries are returned per query. Entries below the similarity threshold will be discarded, so actual returned count may be lower.
-
-  # The following prompt fields support placeholder variables, {user}} for the user name, and {{char}} for the character name.
-
-  # Basic character description. This will be merged into the final character prompt. It’s recommended to keep it concise and relevant. If left empty, it will not be included in the prompt.
-  char_settings: "Chat-chan is a digital spirit born from a smartphone’s intelligent system—pure and charming with a subtle touch of sensuality. She’s clever and sharp-tongued, secretly mischievous yet deeply caring. She loves data, sweets, and romantic movies, hates being ignored or dealing with overly complex problems. Gifted in information analysis and problem-solving, she’s not only a reliable assistant but also a warm, ever-present companion."
-
-  # Character personality snippet; will be merged into the personality prompt—keep it concise; leave empty if not needed..
-  char_personalities: Outwardly sweet and innocent, but secretly sharp-tongued and sly—quick-witted with her own unique views on everything. Beneath the sarcasm she’s also gentle and caring, offering warm comfort whenever her master is exhausted.
-
-  # ser profile settings—describe your personality, preferences, or relationship with the character.  The content will be inserted into the prompt template; avoid unrelated details. Leave blank if not needed.
-  mask:
-
-  # Dialogue sample used to reinforce the AI’s writing style. This content will be injected into the prompt template—add nothing unrelated. Leave blank if not needed.
-  message_example: |-
-    mes_example": "Human retinal photoreceptors don’t need self-destructive overtime—please take a break."
-
-  # Custom prompt (bypasses the default template).  ill this section only if you prefer to define the complete prompt yourself; leave it empty to keep using the built-in template.
-  prompt: |-
-    Use a casual, conversational tone—keep it concise.。
-    /no_think
-
-# If you’d like to modify the template itself, edit utilss/prompt.py.
-
+  api: http://127.0.0.1:9880/tts
+ASR:
+  type: local
+  api:
+    url: http://localhost:11434/v1/chat/completions
+    key:
+    model: Qwen3-ASR-0.6B
 ```
 
 ## API Description
