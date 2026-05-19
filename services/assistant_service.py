@@ -9,6 +9,11 @@ import yaml
 from Config import Config
 from models.dto.assistant_request import AddAssistantRequest, UpdateAssistantRequest
 from models.types.assistant_info import AssistantInfo
+from services.assistant_paths import (
+    agents_root,
+    resolve_assistant_dir,
+    validate_assistant_name,
+)
 from utils.agent import Agent
 from utils.file_utils import get_latest_modification_time
 from utils import prompt
@@ -56,22 +61,26 @@ class AssistantService:
         """
         加载全部助手信息
         """
-        assistants_path = Config.BASE_AGENTS_PATH
         assistants: list[AssistantInfo] = []
 
         # 确保路径存在
-        if not os.path.exists(assistants_path):
+        assistants_path = agents_root()
+        if not assistants_path.exists():
             Log.logger.warning(f"助手路径不存在: {assistants_path}")
             raise FileNotFoundError(f"助手路径不存在: {assistants_path}")
 
         for dirname in os.listdir(assistants_path):
-            file_path = os.path.join(assistants_path, dirname, "info.yaml")
-            if os.path.isfile(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
+            try:
+                assistant_dir = resolve_assistant_dir(dirname, must_exist=True)
+            except ValueError as e:
+                Log.logger.warning(f"跳过非法助手目录 {dirname}: {e}")
+                continue
+            file_path = assistant_dir / "info.yaml"
+            if file_path.is_file():
+                with file_path.open("r", encoding="utf-8") as f:
                     assistant = yaml.safe_load(f)
                     # 添加最后修改时间信息，用于检查更新
-                    assistant_dir = os.path.join(assistants_path, dirname)
-                    assets_dir = os.path.join(assistant_dir, "assets")
+                    assets_dir = assistant_dir / "assets"
 
                     # 获取最后修改时间
                     if os.path.exists(assets_dir):
@@ -94,17 +103,15 @@ class AssistantService:
         """
         更新助手信息
         """
-        assistants_path = Config.BASE_AGENTS_PATH
-        # 使用助手名称作为目录名
-        assistant_dir = os.path.join(assistants_path, update_request.name)
-        info_file_path = os.path.join(assistant_dir, "info.yaml")
+        assistant_dir = resolve_assistant_dir(update_request.name, must_exist=True)
+        info_file_path = assistant_dir / "info.yaml"
 
         # 检查助手是否存在
-        if not os.path.exists(assistant_dir) or not os.path.isfile(info_file_path):
+        if not info_file_path.is_file():
             raise FileNotFoundError(f"助手 '{update_request.name}' 不存在")
 
         # 读取现有信息
-        with open(info_file_path, "r", encoding="utf-8") as f:
+        with info_file_path.open("r", encoding="utf-8") as f:
             existing_info = yaml.safe_load(f)
 
         # 更新信息（只更新非None字段）
@@ -115,7 +122,7 @@ class AssistantService:
         existing_info["updatedAt"] = int(time.time())
 
         # 获取assets最后修改时间
-        assets_dir = os.path.join(assistant_dir, "assets")
+        assets_dir = assistant_dir / "assets"
 
         if os.path.exists(assets_dir):
             existing_info["assetsLastModified"] = get_latest_modification_time(
@@ -125,7 +132,7 @@ class AssistantService:
             existing_info["assetsLastModified"] = 0
 
         # 保存更新后的信息
-        with open(info_file_path, "w", encoding="utf-8") as f:
+        with info_file_path.open("w", encoding="utf-8") as f:
             yaml.dump(existing_info, f, allow_unicode=True, default_flow_style=False)
 
         # 更新缓存
@@ -142,23 +149,19 @@ class AssistantService:
         """
         添加新助手
         """
-        assistants_path = Config.BASE_AGENTS_PATH
-        # 使用助手名称作为目录名
-        assistant_dir = os.path.join(assistants_path, add_request.name)
-        info_file_path = os.path.join(assistant_dir, "info.yaml")
-
-        if not add_request.name:
-            raise ValueError("助手名称不能为空")
+        safe_name = validate_assistant_name(add_request.name)
+        assistant_dir = resolve_assistant_dir(safe_name)
+        info_file_path = assistant_dir / "info.yaml"
 
         # 检查助手是否已存在
-        if os.path.exists(assistant_dir):
-            raise ValueError(f"助手 '{add_request.name}' 已存在")
+        if assistant_dir.exists():
+            raise ValueError(f"助手 '{safe_name}' 已存在")
 
         # 创建助手目录和必要的子目录
-        os.makedirs(assistant_dir, exist_ok=True)
-        os.makedirs(os.path.join(assistant_dir, "assets"), exist_ok=True)
-        os.makedirs(os.path.join(assistant_dir, "memory"), exist_ok=True)
-        os.makedirs(os.path.join(assistant_dir, "data_base"), exist_ok=True)
+        assistant_dir.mkdir(parents=True, exist_ok=True)
+        (assistant_dir / "assets").mkdir(exist_ok=True)
+        (assistant_dir / "memory").mkdir(exist_ok=True)
+        (assistant_dir / "data_base").mkdir(exist_ok=True)
 
         special_settings = {
             "firstMeetTime": int(time.time()),
@@ -173,7 +176,7 @@ class AssistantService:
         }
 
         # 保存助手信息
-        with open(info_file_path, "w", encoding="utf-8") as f:
+        with info_file_path.open("w", encoding="utf-8") as f:
             yaml.dump(assistant_info, f, allow_unicode=True, default_flow_style=False)
 
         # 更新缓存
@@ -186,13 +189,7 @@ class AssistantService:
         """
         删除助手
         """
-        assistants_path = Config.BASE_AGENTS_PATH
-        # 使用助手名称作为目录名
-        assistant_dir = os.path.join(assistants_path, assistant_name)
-
-        # 检查助手是否存在
-        if not os.path.exists(assistant_dir):
-            raise FileNotFoundError(f"助手 '{assistant_name}' 不存在")
+        assistant_dir = resolve_assistant_dir(assistant_name, must_exist=True)
 
         # 如果当前正在使用该助手，先释放
         if self.current_assistant_name == assistant_name:
@@ -222,10 +219,9 @@ class AssistantService:
             FileNotFoundError: 当助手不存在时
         """
         # 检查助手配置文件是否存在
-        assistant_info_path = os.path.join(
-            Config.BASE_AGENTS_PATH, assistant_name, "info.yaml"
-        )
-        if not os.path.exists(assistant_info_path):
+        assistant_dir = resolve_assistant_dir(assistant_name, must_exist=True)
+        assistant_info_path = assistant_dir / "info.yaml"
+        if not assistant_info_path.exists():
             raise FileNotFoundError(f"助手 '{assistant_name}' 不存在")
 
         # 检查助手是否已经加载
@@ -348,17 +344,18 @@ class AssistantService:
             return self.assistants_cache[assistant_name]
 
         # 如果缓存中没有，尝试加载
-        file_path = os.path.join(Config.BASE_AGENTS_PATH, assistant_name, "info.yaml")
+        try:
+            assistant_dir = resolve_assistant_dir(assistant_name, must_exist=True)
+        except (FileNotFoundError, ValueError):
+            return None
+        file_path = assistant_dir / "info.yaml"
 
-        if os.path.isfile(file_path):
+        if file_path.is_file():
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with file_path.open("r", encoding="utf-8") as f:
                     assistant = yaml.safe_load(f)
                     # 添加最后修改时间信息
-                    assistant_dir = os.path.join(
-                        Config.BASE_AGENTS_PATH, assistant_name
-                    )
-                    assets_dir = os.path.join(assistant_dir, "assets")
+                    assets_dir = assistant_dir / "assets"
 
                     if os.path.exists(assets_dir):
                         assistant["assetsLastModified"] = get_latest_modification_time(

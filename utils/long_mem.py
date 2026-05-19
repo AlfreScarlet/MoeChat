@@ -6,7 +6,6 @@ from utils import embedding, prompt
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 import numpy as np
-import pickle
 import requests
 import jionlp
 from bisect import bisect_left, bisect_right
