@@ -9,20 +9,23 @@ emotion_service.py - 情感服务主程序
 
 import os
 import json
+from pathlib import Path
 from typing import Optional, Dict, Any
 from .keyword_loader import KeywordLoader
 from .emotion_processor import EmotionProcessor
 
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.json")
+
 
 class EmotionService:
-    def __init__(self, config_path: str = "meme_system/config.json"):
+    def __init__(self, config_path: str | os.PathLike | None = None):
         """
         初始化情感服务
 
         Args:
             config_path: 配置文件路径
         """
-        self.config_path = config_path
+        self.config_path = str(config_path or DEFAULT_CONFIG_PATH)
         self.config = {}
         self.keyword_loader = None
         self.emotion_processor = None
@@ -306,7 +309,7 @@ class EmotionService:
 _emotion_service_instance = None
 
 
-def get_emotion_service(config_path: str = "meme_system/config.json") -> EmotionService:
+def get_emotion_service(config_path: str | os.PathLike | None = None) -> EmotionService:
     """
     获取情感服务实例（单例模式）
 

@@ -6,9 +6,9 @@
   },
 
   "paths": {
-    "memes_base_dir": "/core/meme_system/memes/",
-    "keywords_dir": "/core/meme_system/",
-    "expression_url_prefix": "/web/static/memes/"
+    "memes_base_dir": "web/resources/static/memes/",
+    "keywords_dir": "core/meme_system/",
+    "expression_url_prefix": "/memes/"
   },
 
   "scoring_weights": {
