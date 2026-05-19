@@ -6,7 +6,6 @@ from utils import embedding, prompt
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 import numpy as np
-import pickle
 import requests
 import jionlp
 from bisect import bisect_left, bisect_right
@@ -37,10 +36,10 @@ class Memory:
         # self.char_vectors = np.ndarray()
 
         # 加载记忆
-        msg_vectors = []
         self.memories_path = f"./data/agents/{self.agent_id}/memory"
         # 加载记忆
         self._load_all_memories()
+        self._sort_loaded_memories()
         
         Log.logger.info(
             f"共加载{len(self.memories_key)}条记忆...{len(self.vectors)}条记忆向量"
@@ -58,6 +57,17 @@ class Memory:
                 except Exception as e:
                     Log.logger.error(f"【{file_path}】记忆加载失败: {e}")
                     continue
+
+    def _sort_loaded_memories(self):
+        """保持 timestamp 与 vector 同步排序，bisect 检索依赖该顺序。"""
+        if not self.memories_key:
+            return
+        sorted_items = sorted(
+            zip(self.memories_key, self.vectors),
+            key=lambda item: item[0],
+        )
+        self.memories_key = [item[0] for item in sorted_items]
+        self.vectors = [item[1] for item in sorted_items]
 
     def _load_jsonl_file(self, file_path: str):
         """加载jsonl格式的记忆文件"""
@@ -141,7 +151,7 @@ class Memory:
             Log.logger.info(f"深度检索记忆，检索阈值{self.thresholds}")
             q_v = embedding.q2vect([msg])[0]
             tmp_msg = ""
-            for index in range(res_index[0] + 1, res_index[1] + 1):
+            for index in range(res_index[0], res_index[1] + 1):
                 rr = np.dot(self.vectors[index], q_v)
                 if rr >= self.thresholds:
                     tmp_msg += str(self.memories_data[self.memories_key[index]])
@@ -156,7 +166,7 @@ class Memory:
             #     res_msg.append(res_mem)
         else:
             tmp_mem = ""
-            for index in range(res_index[0] + 1, res_index[1] + 1):
+            for index in range(res_index[0], res_index[1] + 1):
                 tmp_mem += str(self.memories_data[self.memories_key[index]])
                 tmp_mem += "\n"
             if len(tmp_mem) > 0:
