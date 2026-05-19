@@ -85,6 +85,26 @@ Tips:
 
 */
 
+function appendText(parent, text) {
+  const parts = String(text).split("\n");
+  parts.forEach((part, index) => {
+    if (index > 0) parent.appendChild(document.createElement("br"));
+    parent.appendChild(document.createTextNode(part));
+  });
+}
+
+function normaliseImageUrl(rawUrl) {
+  const trimmed = String(rawUrl).trim();
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch (err) {
+    return null;
+  }
+  return null;
+}
+
 //消息和头像
 function appendMessage(role, text, append = false) {
   const now = new Date();
@@ -92,28 +112,44 @@ function appendMessage(role, text, append = false) {
   const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
   div.className = `message ${role}`;
   const avatar = role === "user" ? "image/user__avatar.png" : "image/bot__avatar.png";
-  const avatarHTML = `<img src="${avatar}" class="avatar ${role}-avatar">`;
+  const avatarImg = document.createElement("img");
+  avatarImg.src = avatar;
+  avatarImg.className = `avatar ${role}-avatar`;
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const timeLabel = document.createElement("small");
+  timeLabel.style.opacity = "0.6";
+  timeLabel.textContent = `[${timestamp}]`;
+  bubble.appendChild(timeLabel);
+  bubble.appendChild(document.createElement("br"));
 
   const imgTagRegex = /\{img\}((https?:\/\/[^\s]+)|\/[^\s]+)/;
   const imgMatch = text.match(imgTagRegex);
 
   if (role === "bot" && imgMatch) {
-    const imgUrl = imgMatch[1]; 
+    const imgUrl = normaliseImageUrl(imgMatch[1]);
     const remainingText = text.replace(imgTagRegex, "").trim();
 
-    div.innerHTML = `${avatarHTML}<div class="bubble">
-                        <small style='opacity: 0.6;'>[${timestamp}]</small><br>
-                        <img src="${imgUrl}" alt="图片加载失败" style="max-width: 90%; border-radius: 8px; margin-top: 5px;">
-                        ${remainingText ? `<br>${remainingText}` : ''}
-                     </div>`;
-  } else {
-    if (role === "user") {
-      div.innerHTML = `${avatarHTML}<div class="bubble"><small style='opacity: 0.6;'>[${timestamp}]</small><br>${text}</div>`;
-    } else {
-      div.innerHTML = `${avatarHTML}<div class="bubble"><small style='opacity: 0.6;'>[${timestamp}]</small><br>${text}</div>`;
+    if (imgUrl) {
+      const image = document.createElement("img");
+      image.src = imgUrl;
+      image.alt = "图片加载失败";
+      image.style.maxWidth = "90%";
+      image.style.borderRadius = "8px";
+      image.style.marginTop = "5px";
+      bubble.appendChild(image);
     }
+    if (remainingText) {
+      bubble.appendChild(document.createElement("br"));
+      appendText(bubble, remainingText);
+    }
+  } else {
+    appendText(bubble, text);
   }
 
+  div.appendChild(avatarImg);
+  div.appendChild(bubble);
   chatLog.appendChild(div);
   chatLog.scrollTop = chatLog.scrollHeight;
 
@@ -634,7 +670,7 @@ function launchRainEffect() {
   window.rainEffectLoaded = true;
 
   const rainScript = document.createElement("script");
-  rainScript.src = "rain_effect.js";
+  rainScript.src = "/js/rain_effect.js";
   rainScript.id = "rainEffectScript";
   document.body.appendChild(rainScript);
 
