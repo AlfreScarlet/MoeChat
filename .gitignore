@@ -11,5 +11,4 @@ __pycache__
 !/data/agents/Chat酱/info.yaml
 data/last_used_agent.txt
 
-test*
 uv.lock
