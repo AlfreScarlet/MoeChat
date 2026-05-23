@@ -8,7 +8,7 @@ Core:
   max_text_len: 40
 LLM:
   api: https://api.siliconflow.cn/v1/chat/completions
-  key: sk-tcdxspehrwkdjtkffrrqpmfmmmhpmofgoiwtzuaelkjxbakq
+  key: "" # Set your own OpenAI-compatible API key locally.
   model: Qwen/Qwen3-8B
   extra_config:
     # 大模型API额外参数，如：temperature:0.7，温度参数
@@ -19,7 +19,7 @@ LLM:
     # temperature: 0.7
 LLM2: # 用于提取记录长期记忆的大模型，与对话模型分离，达到更好的效果
   api: https://api.siliconflow.cn/v1/chat/completions
-  key: sk-tcdxspehrwkdjtkffrrqpmfmmmhpmofgoiwtzuaelkjxbakq
+  key: "" # Set your own OpenAI-compatible API key locally.
   model: Qwen/Qwen3-8B
   extra_config:
   # 大模型API额外参数，如：temperature: 0.7，温度参数
