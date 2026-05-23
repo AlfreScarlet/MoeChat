@@ -411,28 +411,30 @@ class Agent:
         msg_data_tmp = self.msg_data_tmp.copy()
         m1 = msg_data_tmp[-2]["content"]
 
-        try:
-            # 插入核心记忆
-            insert_core_mem_thread = Thread(
-                target=self.insert_core_mem,
-                args=(
-                    m1,
-                    self.msg_data_tmp[-1]["content"],
-                    self.msg_data[-1]["content"],
-                ),
+        if self.enable_core_memory:
+            try:
+                # 插入核心记忆
+                insert_core_mem_thread = Thread(
+                    target=self.insert_core_mem,
+                    args=(
+                        m1,
+                        self.msg_data_tmp[-1]["content"],
+                        self.msg_data[-1]["content"],
+                    ),
+                    daemon=True,
+                )
+
+                insert_core_mem_thread.start()
+            except Exception as e:
+                Log.logger.error(f"核心记忆插入失败：{self.msg_data_tmp}，错误：{e}")
+        if self.enable_long_memory:
+            # 插入记忆
+            add_memory_thread = Thread(
+                target=self.memoryEngine.add_memory1,
+                args=(msg_data_tmp, self.current_time, self.llm_config),
                 daemon=True,
             )
-
-            insert_core_mem_thread.start()
-        except Exception as e:
-            Log.logger.error(f"核心记忆插入失败：{self.msg_data_tmp}，错误：{e}")
-        # 插入记忆
-        add_memory_thread = Thread(
-            target=self.memoryEngine.add_memory1,
-            args=(msg_data_tmp, self.current_time, self.llm_config),
-            daemon=True,
-        )
-        add_memory_thread.start()
+            add_memory_thread.start()
 
         self.msg_data += self.msg_data_tmp
 
@@ -449,4 +451,3 @@ class Agent:
             )
         # 清空临时消息列表
         self.msg_data_tmp = []
-
