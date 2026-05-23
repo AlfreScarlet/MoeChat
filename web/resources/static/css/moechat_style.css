@@ -771,7 +771,7 @@ button#clearBtn {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: url("crack_overlay.png") center/cover no-repeat;
+  background: url("/image/crack_overlay.png") center/cover no-repeat;
   z-index: 9999;
   pointer-events: none;
   opacity: 0.75;
