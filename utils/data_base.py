@@ -1,7 +1,7 @@
+import json
 import os
 import yaml
 import hashlib
-import pickle
 import numpy as np
 import faiss
 from utils import embedding
@@ -9,6 +9,10 @@ from utils import log as Log
 from models.types.assistant_info import AssistantInfo
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
+def _cache_path(labels_dir: str, book_name: str) -> str:
+    return os.path.join(labels_dir, f"{book_name}.json")
 
 
 def _sum_md5(file_path: str):
@@ -37,14 +41,16 @@ class DataBase:
         self.databases = []
 
         # 如果不存在创建数据库目录
-        os.makedirs(self.path + "/tmp/labels", exist_ok=True)
+        labels_dir = f"{self.path}/tmp/labels"
+        os.makedirs(labels_dir, exist_ok=True)
 
         base_list = {}
         # 如果存在标签文件，加载标签
         if os.path.exists(self.path + "/tmp/label.yaml"):
             with open(self.path + "/tmp/label.yaml", "r", encoding="utf-8") as f:
-                if base_list:
-                    base_list = yaml.safe_load(f)
+                loaded_base_list = yaml.safe_load(f) or {}
+                if isinstance(loaded_base_list, dict):
+                    base_list = loaded_base_list
         # 搜索世界书目录下的所有文件
         file_list = os.listdir(self.path)
         books = []
@@ -54,7 +60,12 @@ class DataBase:
             file_path = os.path.join(self.path, file)
             if os.path.isfile(file_path):
                 f_md5 = _sum_md5(file_path)
-                if file not in base_list or base_list[file] != f_md5:
+                cache_file = _cache_path(labels_dir, file)
+                if (
+                    file not in base_list
+                    or base_list[file] != f_md5
+                    or not os.path.exists(cache_file)
+                ):
                     books.append(file)
                     books_path.append(file_path)
 
@@ -69,10 +80,16 @@ class DataBase:
                         tmp1.append(data_key)
                         tmp2.append(data[data_key])
                     vect_list = embedding.t2vect(tmp1)
-                    res_data = {"vect": vect_list, "text": tmp2}
-                    pick_data = pickle.dumps(res_data)
-                    with open(f"{self.path}/tmp/labels/{books[index]}.pkl", "wb") as f2:
-                        f2.write(pick_data)
+                    res_data = {
+                        "vect": np.asarray(vect_list, dtype=np.float32).tolist(),
+                        "text": tmp2,
+                    }
+                    with open(
+                        _cache_path(labels_dir, books[index]),
+                        "w",
+                        encoding="utf-8",
+                    ) as f2:
+                        json.dump(res_data, f2, ensure_ascii=False)
                     Log.logger.info(
                         f"成功向量化【{books[index]}】世界书，共加载{len(tmp1)}条数据。"
                     )
@@ -82,17 +99,23 @@ class DataBase:
                     base_list[books[index]] = _sum_md5(books_path[index])
 
         # 加载向量，建立数据库、索引，并保存，更新总表内容
-        file_list = os.listdir(f"{self.path}/tmp/labels")
+        file_list = os.listdir(labels_dir)
         tmp_list = []
         for file in file_list:
-            if not os.path.isfile(f"{self.path}/tmp/labels/{file}"):
+            if not file.endswith(".json"):
                 continue
-            with open(f"{self.path}/tmp/labels/{file}", "rb") as f:
-                tmp_data = pickle.load(f)
-            tmp_list.append(tmp_data["vect"])
+            cache_file = os.path.join(labels_dir, file)
+            if not os.path.isfile(cache_file):
+                continue
+            with open(cache_file, "r", encoding="utf-8") as f:
+                tmp_data = json.load(f)
+            vect = np.asarray(tmp_data["vect"], dtype=np.float32)
+            if vect.ndim == 1:
+                vect = np.expand_dims(vect, axis=0)
+            tmp_list.append(vect)
             self.databases += tmp_data["text"]
             Log.logger.info(
-                f"成功加载【{file}】世界书，共加载{len(tmp_data['vect'])}条数据。"
+                f"成功加载【{file}】世界书，共加载{len(vect)}条数据。"
             )
         with open(f"{self.path}/tmp/label.yaml", "w") as f:
             yaml.safe_dump(base_list, f)

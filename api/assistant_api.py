@@ -1,8 +1,6 @@
-import os
-import re
-import shutil
-import zipfile
 import io
+import os
+import zipfile
 import base64
 from pathlib import Path
 from models.dto.assistant_request import (
@@ -17,6 +15,13 @@ from models.dto.assistant_request import (
 )
 
 from services.assistant_service import AssistantService
+from services.assistant_paths import (
+    AssistantAssetsZipError,
+    AssistantPathError,
+    replace_assets_from_zip,
+    resolve_assistant_dir,
+    resolve_assistant_file,
+)
 from utils.file_utils import get_latest_modification_time
 from fastapi import (
     APIRouter,
@@ -26,13 +31,16 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from Config import Config
 from utils.log import logger
 
 
 assistant_api = APIRouter()
 
 assistant_service = AssistantService()
+
+
+def _bad_assistant_path(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
 
 
 @assistant_api.get("/assistants")
@@ -120,6 +128,10 @@ async def switch_assistant(switch_request: SwitchAssistantRequest):
         }
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"切换助手失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"切换助手失败: {str(e)}")
@@ -139,19 +151,21 @@ async def check_assets_update(
     Returns:
         包含是否需要更新的信息
     """
-    # 构建助手目录路径
-    assistant_dir = os.path.join(Config.BASE_AGENTS_PATH, assistant_assets_check.name)
-    assets_dir = os.path.join(assistant_dir, "assets")
-
-    # 检查助手是否存在
-    if not os.path.exists(assistant_dir):
+    try:
+        assistant_dir = resolve_assistant_dir(
+            assistant_assets_check.name, must_exist=True
+        )
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail=f"Assistant '{assistant_assets_check.name}' not found",
         )
+    assets_dir = assistant_dir / "assets"
 
     # 检查assets目录是否存在
-    if not os.path.exists(assets_dir):
+    if not assets_dir.exists():
         return {
             "msg": "Assets directory not found",
             "needsUpdate": False,
@@ -182,24 +196,24 @@ async def download_assets(assistant_assets_download: AssistantAssetsDownloadRequ
     Returns:
         zip格式的资源文件
     """
-    # 构建助手目录路径
-    assistant_dir = os.path.join(
-        Config.BASE_AGENTS_PATH, assistant_assets_download.name
-    )
-    assets_dir = os.path.join(assistant_dir, "assets")
-
-    # 检查助手是否存在
-    if not os.path.exists(assistant_dir):
+    try:
+        assistant_dir = resolve_assistant_dir(
+            assistant_assets_download.name, must_exist=True
+        )
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
+    except FileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail=f"Assistant '{ assistant_assets_download.name}' not found",
+            detail=f"Assistant '{assistant_assets_download.name}' not found",
         )
+    assets_dir = assistant_dir / "assets"
 
     # 检查assets目录是否存在
-    if not os.path.exists(assets_dir):
+    if not assets_dir.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Assets directory not found for assistant '{ assistant_assets_download.name}'",
+            detail=f"Assets directory not found for assistant '{assistant_assets_download.name}'",
         )
 
     # 创建内存中的zip文件
@@ -207,9 +221,8 @@ async def download_assets(assistant_assets_download: AssistantAssetsDownloadRequ
 
     # 遍历assets目录，添加文件到zip
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        assets_path = Path(assets_dir)
         # 检查目录是否为空
-        if not any(assets_path.iterdir()):
+        if not any(assets_dir.iterdir()):
             # 如果目录为空
             raise HTTPException(
                 status_code=404,
@@ -218,11 +231,12 @@ async def download_assets(assistant_assets_download: AssistantAssetsDownloadRequ
         else:
             # 添加所有文件
             for root, _, files in os.walk(assets_dir):
+                root_path = Path(root)
                 for file in files:
-                    file_path = os.path.join(root, file)
+                    file_path = root_path / file
                     # 计算相对路径，保持目录结构
-                    rel_path = os.path.relpath(file_path, os.path.dirname(assets_dir))
-                    zip_file.write(file_path, rel_path)
+                    rel_path = file_path.relative_to(assistant_dir)
+                    zip_file.write(file_path, rel_path.as_posix())
 
     # 重置文件指针
     zip_buffer.seek(0)
@@ -250,27 +264,6 @@ async def upload_assets(
     Returns:
         上传成功的消息
     """
-    # 验证助手名称合法性
-    if not name or not re.match(r"^[a-zA-Z0-9_\u4e00-\u9fa5]+$", name):
-        raise HTTPException(status_code=400, detail="Invalid assistant name format")
-
-    # 防止路径遍历攻击
-    safe_name = os.path.basename(name)
-    if safe_name != name:
-        raise HTTPException(status_code=400, detail="Invalid assistant name")
-    # 构建助手目录路径
-    assistant_dir = os.path.join(Config.BASE_AGENTS_PATH, safe_name)
-
-    # 检查助手是否存在
-    if not os.path.exists(assistant_dir):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Assistant '{safe_name}' not found",
-        )
-
-    # 构建assets目录路径
-    assets_dir = os.path.join(assistant_dir, "assets")
-
     # 读取上传的文件内容
     try:
         # 读取zip文件内容
@@ -282,63 +275,27 @@ async def upload_assets(
                 status_code=400, detail="Uploaded file is not a valid zip file"
             )
 
-        # 如果原assets目录存在，先删除
-        if os.path.exists(assets_dir):
-            shutil.rmtree(assets_dir)
+        replace_assets_from_zip(name, zip_content)
 
-        # 创建新的assets目录
-        os.makedirs(assets_dir, exist_ok=True)
-
-        # 直接从zip文件中提取assets目录内容
-        with zipfile.ZipFile(io.BytesIO(zip_content), "r") as zip_ref:
-            # 获取zip文件中的所有文件列表
-            zip_contents = zip_ref.namelist()
-
-            # 检查是否包含assets目录
-            has_assets_dir = any(item.startswith("assets/") for item in zip_contents)
-
-            # 提取文件到目标目录
-            for item in zip_contents:
-                # 跳过目录项
-                if item.endswith("/"):
-                    continue
-
-                if has_assets_dir:
-                    # 如果zip中包含assets目录，需要去掉这个前缀
-                    if item.startswith("assets/"):
-                        # 去掉assets/前缀，保留剩余路径
-                        target_path = os.path.join(assets_dir, item[7:])
-                        # 确保目标文件的目录存在
-                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                        # 提取文件
-                        with (
-                            zip_ref.open(item) as source,
-                            open(target_path, "wb") as target,
-                        ):
-                            target.write(source.read())
-                else:
-                    # 如果zip中不包含assets目录，直接提取到assets目录
-                    target_path = os.path.join(assets_dir, item)
-                    # 确保目标文件的目录存在
-                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                    # 提取文件
-                    with (
-                        zip_ref.open(item) as source,
-                        open(target_path, "wb") as target,
-                    ):
-                        target.write(source.read())
-
-        logger.info(f"Successfully uploaded assets for assistant: {safe_name}")
+        logger.info(f"Successfully uploaded assets for assistant: {name}")
 
         return {
             "status": "success",
-            "message": f"Assets uploaded successfully for assistant '{safe_name}'",
+            "message": f"Assets uploaded successfully for assistant '{name}'",
         }
 
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid zip file format")
+    except HTTPException:
+        raise
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
+    except AssistantAssetsZipError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Assistant '{name}' not found")
     except Exception as e:
-        logger.error(f"Error uploading assets for assistant {safe_name}: {str(e)}")
+        logger.error(f"Error uploading assets for assistant {name}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to upload assets: {str(e)}"
         )
@@ -359,6 +316,8 @@ async def update_assistant(update_request: UpdateAssistantRequest):
         }
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
     except Exception as e:
         logger.error(f"更新助手信息失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"更新助手信息失败: {str(e)}")
@@ -395,6 +354,8 @@ async def delete_assistant(delete_request: DeleteAssistantRequest):
         return {"msg": f"助手 '{delete_request.name}' 删除成功"}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
     except Exception as e:
         logger.error(f"删除助手失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"删除助手失败: {str(e)}")
@@ -403,13 +364,15 @@ async def delete_assistant(delete_request: DeleteAssistantRequest):
 @assistant_api.post("/assistant/info/avatar")
 async def get_assistant_avatar(get_request: GetAssistantAvatar):
     try:
-        avatar_bytes = b""
-        with open(f"data/agents/{get_request.name}/avatar", "rb") as f:
+        avatar_path = resolve_assistant_file(get_request.name, "avatar", must_exist=True)
+        with avatar_path.open("rb") as f:
             avatar_bytes = f.read()
         avatar_base64 = base64.b64encode(avatar_bytes).decode("utf-8")
         return {"msg": "获取助手头像成功", "data": avatar_base64}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except AssistantPathError as e:
+        raise _bad_assistant_path(e)
     except Exception as e:
         logger.error(f"获取助手头像失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取助手头像失败: {str(e)}")
@@ -418,13 +381,15 @@ async def get_assistant_avatar(get_request: GetAssistantAvatar):
 @assistant_api.post("/assistant/upload/avatar")
 async def upload_assistant_avatar(data: UploadAssistantAvatar):
     try:
-        avatar_data = base64.b64decode(data.data)
-        avatar_path = f"data/agents/{data.name}/avatar"
-        with open(avatar_path, "wb") as f:
+        avatar_data = base64.b64decode(data.data, validate=True)
+        avatar_path = resolve_assistant_file(data.name, "avatar")
+        with avatar_path.open("wb") as f:
             f.write(avatar_data)
         return {"msg": "上传助手头像成功"}
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except (AssistantPathError, ValueError) as e:
+        raise _bad_assistant_path(e)
     except Exception as e:
         logger.error(f"上传助手头像失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"上传助手头像失败: {str(e)}")
