@@ -276,56 +276,149 @@ if (
   if (role === "bot") lastBotMessageDiv = div.querySelector(".bubble");
   }
 
+  function showErrorMessage(message) {
+    appendMessage("bot", `⚠️ ${message}`);
+  }
+
+  function finishHandling() {
+    if (currentEventSource) currentEventSource.close();
+    currentEventSource = null;
+    isHandling = false;
+    recordBtn.disabled = !mediaRecorder;
+  }
+
+  function startChatStream(text) {
+    if (currentEventSource) currentEventSource.close();
+    lastBotMessageDiv = null;
+    let hasDisplayedMessage = false;
+    currentEventSource = new EventSource('/api/stream_chat?text=' + encodeURIComponent(text));
+    currentEventSource.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (err) {
+        console.error('SSE parse error:', err);
+        showErrorMessage('聊天响应解析失败。');
+        finishHandling();
+        return;
+      }
+      if (data.type === 'error' || data.error) {
+        showErrorMessage(data.message || data.error || '聊天服务返回错误。');
+        finishHandling();
+        return;
+      }
+      if (data.file && typeof data.file === 'string' && data.file.length > 20) {
+        enqueueAudio(data.file);
+      }
+      if (
+        data.message &&
+        typeof data.message === 'string' &&
+        (!data.done || !hasDisplayedMessage)
+      ) {
+        appendMessage("bot", data.message, true);
+        hasDisplayedMessage = true;
+      }
+      if (data.done) finishHandling();
+    };
+    currentEventSource.onerror = (err) => {
+      console.error('SSE error:', err);
+      showErrorMessage('聊天连接中断，请稍后重试。');
+      finishHandling();
+    };
+  }
+
+  function audioBufferToWavBlob(audioBuffer) {
+    const channelCount = audioBuffer.numberOfChannels;
+    const sampleCount = audioBuffer.length;
+    const sampleRate = audioBuffer.sampleRate;
+    const bytesPerSample = 2;
+    const blockAlign = channelCount * bytesPerSample;
+    const dataSize = sampleCount * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    function writeString(value) {
+      for (let i = 0; i < value.length; i++) view.setUint8(offset++, value.charCodeAt(i));
+    }
+
+    writeString('RIFF');
+    view.setUint32(offset, 36 + dataSize, true); offset += 4;
+    writeString('WAVE');
+    writeString('fmt ');
+    view.setUint32(offset, 16, true); offset += 4;
+    view.setUint16(offset, 1, true); offset += 2;
+    view.setUint16(offset, channelCount, true); offset += 2;
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * blockAlign, true); offset += 4;
+    view.setUint16(offset, blockAlign, true); offset += 2;
+    view.setUint16(offset, 16, true); offset += 2;
+    writeString('data');
+    view.setUint32(offset, dataSize, true); offset += 4;
+
+    const channels = Array.from({ length: channelCount }, (_, index) => audioBuffer.getChannelData(index));
+    for (let i = 0; i < sampleCount; i++) {
+      for (let channel = 0; channel < channelCount; channel++) {
+        const sample = Math.max(-1, Math.min(1, channels[channel][i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function blobToWavDataUrl(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    return blobToDataUrl(audioBufferToWavBlob(decoded));
+  }
+
   let isHandling = false;
-  function handleBlob(blob) {
+  async function handleBlob(blob) {
     if (isHandling) return;
     isHandling = true;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64AudioWithHeader = reader.result;
-      recordBtn.disabled = true;
+    recordBtn.disabled = true;
+    try {
+      const base64AudioWithHeader = await blobToWavDataUrl(blob);
       const res = await fetch('/api/asr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audio: base64AudioWithHeader })
       });
+      if (!res.ok) throw new Error(`ASR request failed with status ${res.status}`);
       const result = await res.json();
-      recordBtn.disabled = false;
       if (!result.text || result.text === 'null') {
+        showErrorMessage('没有识别到有效语音。');
         isHandling = false;
+        recordBtn.disabled = !mediaRecorder;
         return;
       }
       appendMessage("user", result.text);
-      if (currentEventSource) currentEventSource.close();
-      lastBotMessageDiv = null;
-      currentEventSource = new EventSource('/api/stream_chat?text=' + encodeURIComponent(result.text));
-      currentEventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.done) {
-          currentEventSource.close();
-          currentEventSource = null;
-          isHandling = false;
-          return;
-        }
-        if (data.file && typeof data.file === 'string' && data.file.length > 20) {
-          enqueueAudio(data.file);
-        }
-        if (data.message && typeof data.message === 'string') {
-          appendMessage("bot", data.message, true);
-        }
-      };
-      currentEventSource.onerror = (err) => {
-        console.error('SSE error:', err);
-        if (currentEventSource) currentEventSource.close();
-        currentEventSource = null;
-        isHandling = false;
-      };
-    };
-    reader.readAsDataURL(blob);
+      startChatStream(result.text);
+    } catch (err) {
+      console.error('ASR error:', err);
+      showErrorMessage('语音识别失败，请检查麦克风权限或稍后重试。');
+      isHandling = false;
+      recordBtn.disabled = !mediaRecorder;
+    }
   }
 
   // === 录音按钮绑定 ===
   recordBtn.addEventListener('mousedown', () => {
+    if (!mediaRecorder) {
+      showErrorMessage('麦克风不可用，请检查浏览器权限。');
+      return;
+    }
     if (!recording) {
       audioChunks = [];
       mediaRecorder.start();
@@ -339,6 +432,10 @@ if (
     }
   });
   recordBtn.addEventListener('touchstart', () => {
+    if (!mediaRecorder) {
+      showErrorMessage('麦克风不可用，请检查浏览器权限。');
+      return;
+    }
     if (!recording) {
       audioChunks = [];
       mediaRecorder.start();
@@ -352,10 +449,17 @@ if (
     }
   });
 
+  recordBtn.disabled = true;
   navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    mediaRecorder = new MediaRecorder(stream);
+    const preferredMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : '';
+    mediaRecorder = preferredMime
+      ? new MediaRecorder(stream, { mimeType: preferredMime })
+      : new MediaRecorder(stream);
+    recordBtn.disabled = false;
     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = () => handleBlob(new Blob(audioChunks, { type: 'audio/webm' }));
+    mediaRecorder.onstop = () => handleBlob(new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' }));
 
     // === VAD 自动录音功能 ===
     if (!/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
@@ -413,6 +517,10 @@ if (
         }
       };
     }
+  }).catch(err => {
+    console.error('Microphone permission error:', err);
+    recordBtn.disabled = true;
+    showErrorMessage('无法访问麦克风，请允许浏览器麦克风权限后刷新页面。');
   });
 
   // ===== 新增：用于发送隐藏事件的辅助函数 =====
@@ -420,30 +528,7 @@ if (
     if (!text || isHandling) return;
     isHandling = true;
     // 隐藏事件不在用户侧生成聊天气泡
-    if (currentEventSource) currentEventSource.close();
-    lastBotMessageDiv = null;
-    currentEventSource = new EventSource('/api/stream_chat?text=' + encodeURIComponent(text));
-    currentEventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.done) {
-        currentEventSource.close();
-        currentEventSource = null;
-        isHandling = false;
-        return;
-      }
-      if (data.file && typeof data.file === 'string' && data.file.length > 20) {
-        enqueueAudio(data.file);
-      }
-      if (data.message && typeof data.message === 'string') {
-        appendMessage("bot", data.message, true);
-      }
-    };
-    currentEventSource.onerror = (err) => {
-      console.error('SSE error:', err);
-      if (currentEventSource) currentEventSource.close();
-      currentEventSource = null;
-      isHandling = false;
-    };
+    startChatStream(text);
   }
   // ===========================================
 
@@ -500,30 +585,7 @@ if (
     if (!text || isHandling) return;
     isHandling = true;
     appendMessage("user", text);
-    if (currentEventSource) currentEventSource.close();
-    lastBotMessageDiv = null;
-    currentEventSource = new EventSource('/api/stream_chat?text=' + encodeURIComponent(text));
-    currentEventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.done) {
-        currentEventSource.close();
-        currentEventSource = null;
-        isHandling = false;
-        return;
-      }
-      if (data.file && typeof data.file === 'string' && data.file.length > 20) {
-        enqueueAudio(data.file);
-      }
-      if (data.message && typeof data.message === 'string') {
-        appendMessage("bot", data.message, true);
-      }
-    };
-    currentEventSource.onerror = (err) => {
-      console.error('SSE error:', err);
-      if (currentEventSource) currentEventSource.close();
-      currentEventSource = null;
-      isHandling = false;
-    };
+    startChatStream(text);
     document.getElementById('manualInput').value = '';
   });
 
