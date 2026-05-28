@@ -448,6 +448,28 @@ class Agent:
                 sort_keys=False,
                 allow_unicode=True,
                 indent=4,
-            )
+        )
         # 清空临时消息列表
         self.msg_data_tmp = []
+
+    def clear_chat_context(self) -> None:
+        """
+        清空当前会话上下文和摘要，不删除长期记忆或核心记忆。
+        """
+        self.msg_data = []
+        self.msg_data_tmp = []
+        self.context_summary = ""
+        self.summary_time = time.time()
+
+        with open(
+            f"./data/agents/{self.agent_name}/history.yaml",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write("")
+        with open(
+            f"./data/agents/{self.agent_name}/context_summary.md",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write("")

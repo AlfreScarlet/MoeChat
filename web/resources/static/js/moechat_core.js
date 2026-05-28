@@ -532,9 +532,19 @@ if (
   }
   // ===========================================
 
-  document.getElementById('clearBtn').addEventListener('click', () => {
-    chatLog.innerHTML = '';
-    lastBotMessageDiv = null;
+  document.getElementById('clearBtn').addEventListener('click', async () => {
+    if (currentEventSource) currentEventSource.close();
+    currentEventSource = null;
+    isHandling = false;
+    try {
+      const res = await fetch('/api/chat/context/clear', { method: 'POST' });
+      if (!res.ok) throw new Error(`clear context failed: ${res.status}`);
+      chatLog.innerHTML = '';
+      lastBotMessageDiv = null;
+    } catch (err) {
+      console.error('Clear context error:', err);
+      appendMessage("bot", "⚠️ 清空聊天上下文失败，请稍后重试。");
+    }
   });
 
   document.getElementById('muteToggle').addEventListener('click', () => {
