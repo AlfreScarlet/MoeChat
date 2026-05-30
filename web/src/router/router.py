@@ -5,6 +5,9 @@ from web.src.router.api_router import api_router
 from web.src.controller.controller import templates
 from server_settings import cors_allows_credentials, get_cors_origins
 
+# Legacy experimental router. It contains HeWeather/image/meme branches, but the
+# main web chat currently uses /api/stream_chat -> core.chat_core instead. Do not
+# mount this router without a dedicated integration pass and end-to-end checks.
 # from core.external_server import router as models_router
 
 
