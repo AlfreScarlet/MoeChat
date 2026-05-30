@@ -497,7 +497,7 @@ async def text_llm_tts(params: tts_data):
     msg_list_for_llm = await agent.get_msg_data(params.msg[-1]["content"])
 
     # 初始化处理器
-    processor = StreamProcessor()
+    processor = StreamProcessor(emotion_processed=True)
 
     # 创建LLM和TTS任务
     llm_task = asyncio.create_task(
