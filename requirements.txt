@@ -3,6 +3,7 @@ colorlog==6.9.0
 faiss-cpu==1.12.0
 fastapi==0.116.1
 filetype==1.2.0
+flask==3.1.1
 funasr==1.2.7
 httpx==0.28.1
 jionlp==1.5.24

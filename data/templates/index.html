@@ -52,15 +52,14 @@
                     {# 使用 Jinja2 的 default 过滤器防止出错 #}
                     <td>{{ editor.get_datetime_from_entry(entry)|default('N/A', true)|strftime('%Y-%m-%d %H:%M:%S') }}</td>
                     <td>{{ entry.type | default('N/A') }}</td>
-                    <td>
-                        {# 内容预览逻辑 (safe 版) #}
+                    <td class="preview">
+                        {# 内容预览逻辑：默认转义用户/助手文本，只用 CSS 保留换行 #}
                         {% if entry.type == 'core' %}
                             {# 核心记忆仍然截断并转义 #}
                             {% set text = entry.data.text | default('') %}
                             {{ text[:80] + ('...' if text|length > 80 else '') }}
                         {% elif entry.type == 'long' %}
-                            {# 【重要】使用 |safe 过滤器来渲染 <br> 标签 #}
-                            {{ entry.generated_preview | default('(预览解析失败)') | safe }}
+                            {{ entry.generated_preview | default('(预览解析失败)') }}
                         {% endif %}
                     </td>
                     <td>{{ entry.data.text_tag if entry.type == 'long' else '' }}</td>
