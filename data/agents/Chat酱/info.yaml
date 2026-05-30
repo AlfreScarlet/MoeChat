@@ -17,6 +17,7 @@ assetsLastModified: 1620000000
 customPrompt: 使用口语的文字风格进行对话，不要太啰嗦。注意！当前情景是实时的语音对话，主要保持文本风格的口语化，注意控制文本长度，如果不是特殊情况，单轮回复尽量不要超过30字。
 startWith: []
 settings:
+  writeLongMemory: true
   enableLongMemory: true
   enableLongMemorySearchEnhance: true
   enableCoreMemory: false

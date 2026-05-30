@@ -47,6 +47,8 @@ class AssistantSettings(BaseModel):
     助手设置模型
     """
 
+    # 是否写入日记，单独控制是否写入助手的长期记忆数据；
+    writeLongMemory: bool = Field(True, description="助手是否会写入日记")
     # 是否启用日记功能，日记功能可以长期储存对话信息，并根据用户输入的时间信息进行检索；比如：“昨天做了什么？”、“两天前吃的午饭是什么？
     enableLongMemory: bool = Field(True, description="助手是否开启日记功能")
     #  # 启用日记检索加强，使用嵌入模型对检索到的信息做提取，去除与用户提问不相关的内容。
@@ -79,6 +81,7 @@ class AssistantSettings(BaseModel):
         从字典创建 AssistantSettings 实例，如果有不存在的key则返回默认值
         """
         return AssistantSettings(
+            writeLongMemory=data.get("writeLongMemory", True),
             enableLongMemory=data.get("enableLongMemory", True),
             enableLongMemorySearchEnhance=data.get(
                 "enableLongMemorySearchEnhance", True

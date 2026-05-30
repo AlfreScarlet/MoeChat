@@ -129,7 +129,9 @@ class Agent:
         self.data_base_thresholds = self.agent_config.settings.loreBooksThreshold
         # 知识库检索深度
         self.data_base_depth = self.agent_config.settings.loreBooksDepth
-        # 是否开启长期记忆（日记内容）
+        # 是否写入长期记忆数据（日记内容）
+        self.write_long_memory = self.agent_config.settings.writeLongMemory
+        # 是否开启长期记忆检索（日记内容）
         self.enable_long_memory = self.agent_config.settings.enableLongMemory
         # 是否开启长期记忆搜索增强
         self.enable_long_memory_search_enhance = (
@@ -427,7 +429,7 @@ class Agent:
                 insert_core_mem_thread.start()
             except Exception as e:
                 Log.logger.error(f"核心记忆插入失败：{self.msg_data_tmp}，错误：{e}")
-        if self.enable_long_memory:
+        if self.write_long_memory:
             # 插入记忆
             add_memory_thread = Thread(
                 target=self.memoryEngine.add_memory1,
